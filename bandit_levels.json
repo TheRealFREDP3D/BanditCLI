@@ -1,0 +1,110 @@
+{
+  "0": {
+    "level": 0,
+    "title": "",
+    "goal": "The goal of this level is for you to log into the game using SSH.\nThe host to which you need to connect is\nbandit.labs.overthewire.org, on port 2220.\nThe username is bandit0 and the password is bandit0. Once\nlogged in, go to the Level 1 page to find out how to beat Level\n1.",
+    "commands": [
+      "ssh"
+    ],
+    "reading_material": [
+      {
+        "title": "Secure Shell (SSH) on Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Secure_Shell"
+      },
+      {
+        "title": "How to use SSH on wikiHow",
+        "url": "https://www.wikihow.com/Use-SSH"
+      }
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit0.html"
+  },
+  "1": {
+    "level": 1,
+    "title": "",
+    "goal": "The password for the next level is stored in a file called\nreadme located in the home directory. Use this password to log\ninto bandit1 using SSH. Whenever you find a password for a level,\nuse SSH (on port 2220) to log into that level and continue the game.",
+    "commands": [
+      "ls",
+      "cd",
+      "cat",
+      "file",
+      "du",
+      "find"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit1.html"
+  },
+  "2": {
+    "level": 2,
+    "title": "",
+    "goal": "The password for the next level is stored in a file called -\nlocated in the home directory",
+    "commands": [
+      "ls",
+      "cd",
+      "cat",
+      "file",
+      "du",
+      "find"
+    ],
+    "reading_material": [
+      {
+        "title": "Google Search for “dashed filename”",
+        "url": "https://www.google.com/search?q=dashed+filename"
+      },
+      {
+        "title": "Advanced Bash-scripting Guide - Chapter 3 - Special Characters",
+        "url": "https://linux.die.net/abs-guide/special-chars.html"
+      }
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit2.html"
+  },
+  "3": {
+    "level": 3,
+    "title": "",
+    "goal": "The password for the next level is stored in a file called –spaces\nin this filename– located in the home directory",
+    "commands": [
+      "ls",
+      "cd",
+      "cat",
+      "file",
+      "du",
+      "find"
+    ],
+    "reading_material": [
+      {
+        "title": "Google Search for “spaces in filename”",
+        "url": "https://www.google.com/search?q=spaces+in+filename"
+      }
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit3.html"
+  },
+  "4": {
+    "level": 4,
+    "title": "",
+    "goal": "The password for the next level is stored in a hidden file in the\ninhere directory.",
+    "commands": [
+      "ls",
+      "cd",
+      "cat",
+      "file",
+      "du",
+      "find"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit4.html"
+  },
+  "5": {
+    "level": 5,
+    "title": "",
+    "goal": "The password for the next level is stored in the only human-readable\nfile in the inhere directory. Tip: if your terminal is messed\nup, try the “reset” command.",
+    "commands": [
+      "ls",
+      "cd",
+      "cat",
+      "file",
+      "du",
+      "find"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit5.html"
+  }
+}

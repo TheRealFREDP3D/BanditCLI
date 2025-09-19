@@ -1,0 +1,78 @@
+/* App styling */
+Screen {
+    background: $background;
+}
+
+/* Header styling */
+Header {
+    background: $primary;
+    color: $text;
+    height: 3;
+}
+
+/* Terminal output styling */
+#terminal_output {
+    height: 80%;
+    border: solid $secondary;
+    background: $surface;
+}
+
+/* SSH input styling */
+#ssh_username, #ssh_password, #ssh_port {
+    width: 15%;
+    margin: 1 0;
+}
+
+#ssh_connect, #ssh_disconnect {
+    width: 10%;
+    margin: 1 0;
+}
+
+/* Command input styling */
+#command_input {
+    width: 80%;
+    margin: 1 0;
+}
+
+/* Send button styling */
+#send_button {
+    width: 20%;
+    margin: 1 0;
+}
+
+/* Level info styling */
+#level_info {
+    height: 80%;
+    border: solid $secondary;
+    background: $surface;
+}
+
+/* Mentor chat styling */
+#mentor_chat {
+    height: 80%;
+    border: solid $secondary;
+    background: $surface;
+}
+
+/* Mentor input styling */
+#mentor_input {
+    width: 80%;
+    margin: 1 0;
+}
+
+/* Mentor send button styling */
+#mentor_send {
+    width: 20%;
+    margin: 1 0;
+}
+
+/* Button styling */
+Button {
+    margin: 1 0;
+}
+
+/* Label styling */
+Label {
+    margin: 1 0;
+    width: 10%;
+}

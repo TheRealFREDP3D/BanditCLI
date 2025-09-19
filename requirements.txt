@@ -1,0 +1,6 @@
+textual==0.80.0
+paramiko==4.0.0
+openai==1.99.9
+beautifulsoup4==4.13.4
+requests==2.32.4
+python-dotenv==1.0.1
