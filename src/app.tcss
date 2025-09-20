@@ -71,6 +71,28 @@ Button {
     margin: 1 0;
 }
 
+#ssh-controls {
+    align: bottom;
+    margin: 1 0;
+}
+
+#ssh-controls > Vertical {
+    width: 1fr;
+    margin: 0 1;
+}
+
+#ssh-buttons {
+    padding-top: 1;
+}
+
+#command-controls {
+    align: center middle;
+}
+
+#command-controls > Input {
+    width: 1fr;
+}
+
 /* Label styling */
 Label {
     margin: 1 0;

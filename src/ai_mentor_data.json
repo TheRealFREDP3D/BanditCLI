@@ -1,0 +1,21 @@
+{
+  "level_hints": {
+    "0": "This level is about connecting to the game server using SSH. Think about what information you need to establish a secure connection.",
+    "1": "Look for files in your current directory. What commands can help you see what's available?",
+    "2": "Sometimes files have unusual names that make them tricky to access. How do you handle special characters in filenames?",
+    "3": "Hidden files in Linux start with a dot. How can you see all files, including hidden ones?",
+    "4": "When you have many files, you might need to examine their contents or properties to find what you're looking for.",
+    "5": "File properties like size, permissions, and type can help you identify the right file among many options."
+  },
+  "command_explanations": {
+    "ls": "Lists directory contents. Try 'ls -la' to see all files including hidden ones with detailed information.",
+    "cat": "Displays file contents. Use it to read text files.",
+    "cd": "Changes directory. 'cd ..' goes up one level, 'cd ~' goes to home directory.",
+    "pwd": "Shows your current directory path.",
+    "find": "Searches for files and directories. Very powerful with many options for filtering.",
+    "grep": "Searches for text patterns within files.",
+    "file": "Determines file type. Useful when file extensions are misleading or missing.",
+    "du": "Shows disk usage. Can help find files by size.",
+    "ssh": "Secure Shell - used to connect to remote systems securely."
+  }
+}

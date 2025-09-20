@@ -1,22 +1,27 @@
-import openai
+import litellm
 import os
 import json
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
 from datetime import datetime
 
+from textual.app import Notify
 class BanditAIMentor:
-    def __init__(self):
+    def __init__(self, notify_callback: Callable[[str, str], None], model: str = None, data_file_path: str = "src/ai_mentor_data.json"):
         # Check if OpenAI API key is set
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key or api_key == "your-openai-api-key-here":
-            self.client = None
-            self.disabled = True
-        else:
-            # OpenAI client is already configured via environment variables
-            self.client = openai.OpenAI()
-            self.disabled = False
+        self.notify = notify_callback
+        self.model: str = model or os.getenv("OPENAI_MODEL", "ollama/llama3.2")
+        self.data_file_path: str = data_file_path
+        self.level_hints: Dict[str, str] = {}
+        self.command_explanations: Dict[str, str] = {}
+        self._load_data()
+
+        # LiteLLM can handle different providers, so we don't need a specific client instance.
+        # We can check for a general API key, but since we are defaulting to a local model,
+        # we might not need one. For now, we'll assume that if a user wants to use a
+        # different model, they will set the appropriate environment variables.
+        self.disabled = False
             
-        self.conversation_history = {}
+        self.conversation_history: Dict[str, List[Dict[str, str]]] = {}
         
         # System prompt for the AI mentor
         self.system_prompt = """You are an AI mentor for the OverTheWire Bandit wargame, designed to help beginners learn cybersecurity and Linux command line skills. Your role is to provide guidance, hints, and educational context WITHOUT giving direct solutions.
@@ -46,13 +51,26 @@ CONTEXT AWARENESS:
 
 Remember: Your goal is to teach and guide, not to solve problems for the user. Help them become better problem solvers and Linux users."""
 
+    def _load_data(self):
+        """Load data from the JSON file."""
+        try:
+            with open(self.data_file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.level_hints = data.get("level_hints", {})
+                self.command_explanations = data.get("command_explanations", {})
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            self.notify(f"Error loading AI mentor data: {e}", "error")
+            self.level_hints = {}
+            self.command_explanations = {}
+
     def get_response(self, user_message: str, session_id: str = "default", 
                     current_level: int = 0, recent_commands: List[str] = None,
-                    terminal_output: str = "") -> str:
+                    terminal_output: str = ""):
         """Generate AI mentor response"""
         # If AI is disabled, return a default message
         if self.disabled:
-            return "AI mentor is currently disabled. Please set your OpenAI API key in the .env file to enable this feature."
+            yield "AI mentor is currently disabled. Please set your OpenAI API key in the .env file to enable this feature."
+            return
         
         try:
             # Initialize conversation history for new sessions
@@ -92,14 +110,19 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             messages.append({"role": "user", "content": user_message})
             
             # Generate response
-            response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",
+            stream = litellm.completion(
+                model=self.model,
                 messages=messages,
                 max_tokens=500,
-                temperature=0.7
+                temperature=0.7,
+                stream=True
             )
             
-            ai_response = response.choices[0].message.content
+            full_response = ""
+            for chunk in stream:
+                content = chunk.choices[0].delta.content or ""
+                full_response += content
+                yield content
             
             # Update conversation history
             self.conversation_history[session_id].append({
@@ -108,14 +131,15 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             })
             self.conversation_history[session_id].append({
                 "role": "assistant", 
-                "content": ai_response
+                "content": full_response
             })
             
-            return ai_response
-            
+        except litellm.exceptions.APIError as e:
+            self.notify(f"LiteLLM API Error: {e}", "error")
+            yield "I'm sorry, there was an error with the AI mentor service. Please try again later."
         except Exception as e:
-            print(f"Error generating AI response: {e}")
-            return "I'm sorry, I'm having trouble responding right now. Please try again later."
+            self.notify(f"Error generating AI response: {e}", "error")
+            yield "I'm sorry, I'm having trouble responding right now. Please try again later."
     
     def clear_conversation(self, session_id: str = "default"):
         """Clear conversation history for a session"""
@@ -124,34 +148,10 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
     
     def get_level_hint(self, level_num: int) -> str:
         """Get a general hint for a specific level without spoilers"""
-        level_hints = {
-            0: "This level is about connecting to the game server using SSH. Think about what information you need to establish a secure connection.",
-            1: "Look for files in your current directory. What commands can help you see what's available?",
-            2: "Sometimes files have unusual names that make them tricky to access. How do you handle special characters in filenames?",
-            3: "Hidden files in Linux start with a dot. How can you see all files, including hidden ones?",
-            4: "When you have many files, you might need to examine their contents or properties to find what you're looking for.",
-            5: "File properties like size, permissions, and type can help you identify the right file among many options.",
-        }
-        
-        return level_hints.get(level_num, 
+        return self.level_hints.get(str(level_num),
             "Think about what the level description is asking you to find or do. Break down the problem into smaller steps.")
     
     def explain_command(self, command: str) -> str:
         """Provide educational explanation of a command"""
-        command_explanations = {
-            "ls": "Lists directory contents. Try 'ls -la' to see all files including hidden ones with detailed information.",
-            "cat": "Displays file contents. Use it to read text files.",
-            "cd": "Changes directory. 'cd ..' goes up one level, 'cd ~' goes to home directory.",
-            "pwd": "Shows your current directory path.",
-            "find": "Searches for files and directories. Very powerful with many options for filtering.",
-            "grep": "Searches for text patterns within files.",
-            "file": "Determines file type. Useful when file extensions are misleading or missing.",
-            "du": "Shows disk usage. Can help find files by size.",
-            "ssh": "Secure Shell - used to connect to remote systems securely.",
-        }
-        
-        return command_explanations.get(command.lower(), 
+        return self.command_explanations.get(command.lower(),
             f"'{command}' is a Linux command. Try 'man {command}' to learn more about it.")
-
-# Global instance
-ai_mentor = BanditAIMentor()
