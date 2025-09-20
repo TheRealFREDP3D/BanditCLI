@@ -149,10 +149,13 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
         
         return hint
     
+    import hashlib
+
     def explain_command(self, command: str) -> str:
         """Provide educational explanation of a command"""
         # Try to get from cache first
-        cache_key = f"command_explanation_{command.lower()}"
+        command_hash = hashlib.sha256(command.encode('utf-8')).hexdigest()
+        cache_key = f"command_explanation_{command_hash}"
         cached_explanation = cache.get(cache_key)
         if cached_explanation is not None:
             return cached_explanation
