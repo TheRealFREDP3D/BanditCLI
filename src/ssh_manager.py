@@ -32,29 +32,31 @@ class SSHConnection:
         self.read_thread = None
         self.stop_reading = False
         
+    def _create_ssh_client(self) -> None:
+        """Create and configure SSH client with connection parameters."""
+        self.client = paramiko.SSHClient()
+        self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.client.connect(
+            hostname=self.hostname,
+            port=self.port,
+            username=self.username,
+            password=self.password,
+            timeout=10
+        )
+
+    def _create_shell_channel(self) -> None:
+        """Create and configure an interactive shell channel."""
+        self.channel = self.client.invoke_shell()
+        self.channel.settimeout(0.1)
+        self.connected = True
+        self.start_reading()
+
     def connect(self, retries: int = 3) -> bool:
         """Establish SSH connection with retry mechanism"""
         for attempt in range(retries):
             try:
-                self.client = paramiko.SSHClient()
-                self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                
-                self.client.connect(
-                    hostname=self.hostname,
-                    port=self.port,
-                    username=self.username,
-                    password=self.password,
-                    timeout=10
-                )
-                
-                # Create interactive shell
-                self.channel = self.client.invoke_shell()
-                self.channel.settimeout(0.1)
-                self.connected = True
-                
-                # Start reading output in background
-                self.start_reading()
-                
+                self._create_ssh_client()
+                self._create_shell_channel()
                 return True
                 
             except paramiko.AuthenticationException:
