@@ -4,6 +4,8 @@ import json
 from typing import List, Dict, Optional
 from datetime import datetime
 
+from cache import cache
+
 class BanditAIMentor:
     def __init__(self):
         # Check if OpenAI API key is set
@@ -124,6 +126,12 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
     
     def get_level_hint(self, level_num: int) -> str:
         """Get a general hint for a specific level without spoilers"""
+        # Try to get from cache first
+        cache_key = f"level_hint_{level_num}"
+        cached_hint = cache.get(cache_key)
+        if cached_hint is not None:
+            return cached_hint
+        
         level_hints = {
             0: "This level is about connecting to the game server using SSH. Think about what information you need to establish a secure connection.",
             1: "Look for files in your current directory. What commands can help you see what's available?",
@@ -133,11 +141,25 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             5: "File properties like size, permissions, and type can help you identify the right file among many options.",
         }
         
-        return level_hints.get(level_num, 
+        hint = level_hints.get(level_num, 
             "Think about what the level description is asking you to find or do. Break down the problem into smaller steps.")
+        
+        # Cache the result for 1 hour
+        cache.set(cache_key, hint, ttl=3600)
+        
+        return hint
     
+    import hashlib
+
     def explain_command(self, command: str) -> str:
         """Provide educational explanation of a command"""
+        # Try to get from cache first
+        command_hash = hashlib.sha256(command.encode('utf-8')).hexdigest()
+        cache_key = f"command_explanation_{command_hash}"
+        cached_explanation = cache.get(cache_key)
+        if cached_explanation is not None:
+            return cached_explanation
+        
         command_explanations = {
             "ls": "Lists directory contents. Try 'ls -la' to see all files including hidden ones with detailed information.",
             "cat": "Displays file contents. Use it to read text files.",
@@ -150,8 +172,13 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             "ssh": "Secure Shell - used to connect to remote systems securely.",
         }
         
-        return command_explanations.get(command.lower(), 
+        explanation = command_explanations.get(command.lower(), 
             f"'{command}' is a Linux command. Try 'man {command}' to learn more about it.")
+        
+        # Cache the result for 1 hour
+        cache.set(cache_key, explanation, ttl=3600)
+        
+        return explanation
 
 # Global instance
 ai_mentor = BanditAIMentor()
