@@ -4,10 +4,41 @@ from textual.app import App
 from textual.widgets import Header, Footer, TabbedContent, TabPane, TextArea, Input, Button, Label
 from textual.containers import Container, Horizontal, Vertical
 from textual.reactive import reactive
+from textual.binding import Binding
+from textual.message import Message
+from textual.events import Key
+
+
+class CommandInput(Input):
+    """Custom Input widget with command history support."""
+    
+    def __init__(self, command_history, **kwargs):
+        super().__init__(**kwargs)
+        self.command_history = command_history
+    
+    def on_key(self, event: Key) -> None:
+        """Handle key presses."""
+        if event.key == "up":
+            previous_command = self.command_history.get_previous_command()
+            if previous_command is not None:
+                self.value = previous_command
+                self.cursor_position = len(self.value)
+                event.prevent_default()
+        elif event.key == "down":
+            next_command = self.command_history.get_next_command()
+            if next_command is not None:
+                self.value = next_command
+                self.cursor_position = len(self.value)
+                event.prevent_default()
+        elif event.key == "enter":
+            # Reset history index when user types a new command
+            self.command_history.reset_index()
 
 from ssh_manager import SSHManager
 from ai_mentor import ai_mentor
 from level_info import BanditLevelInfo
+from command_history import CommandHistory
+from config import ConfigManager
 
 # Load environment variables
 load_dotenv()
@@ -34,6 +65,11 @@ class BanditCLIApp(App):
         self.ssh_manager = SSHManager()
         self.level_info = BanditLevelInfo()
         self.ssh_connected = False
+        self.config = ConfigManager()
+        self.command_history = CommandHistory(
+            max_size=self.config.get("history.max_commands", 100),
+            history_file=os.path.expanduser("~/.bandit_cli/command_history.json")
+        )
     
     def compose(self):
         """Create child widgets for the app."""
@@ -62,7 +98,7 @@ class BanditCLIApp(App):
                 yield Button("Disconnect", variant="error", id="ssh_disconnect")
             with Horizontal():
                 yield Label("Command:")
-                yield Input(placeholder="Enter command...", id="command_input")
+                yield CommandInput(self.command_history, placeholder="Enter command...", id="command_input")
                 yield Button("Send", variant="primary", id="send_button")
     
     def compose_level_view(self):
@@ -138,13 +174,14 @@ class BanditCLIApp(App):
             self.notify("Port must be a valid number", severity="error")
             return
         
-        # Attempt to connect
+        # Attempt to connect with retries
         success = self.ssh_manager.create_connection(
             self.session_id,
             "bandit.labs.overthewire.org",
             port_int,
             username,
-            password
+            password,
+            retries=3
         )
         
         if success:
@@ -155,7 +192,7 @@ class BanditCLIApp(App):
             if connection:
                 connection.set_output_callback(self.on_ssh_output)
         else:
-            self.notify("Failed to establish SSH connection", severity="error")
+            self.notify("Failed to establish SSH connection. Please check your credentials and network connection.", severity="error")
     
     def disconnect_ssh(self):
         """Disconnect from the SSH server."""
@@ -183,7 +220,11 @@ class BanditCLIApp(App):
         if not command:
             return
         
-        # Add command to recent commands
+        # Add command to history
+        self.command_history.add_command(command)
+        self.command_history.reset_index()
+        
+        # Add command to recent commands (for AI context)
         self.recent_commands.append(command)
         if len(self.recent_commands) > 10:
             self.recent_commands.pop(0)
