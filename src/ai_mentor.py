@@ -121,8 +121,9 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             full_response = ""
             for chunk in stream:
                 content = chunk.choices[0].delta.content or ""
-                full_response += content
-                yield content
+                if content:
+                    full_response += content
+                    yield content
             
             # Update conversation history
             self.conversation_history[session_id].append({
