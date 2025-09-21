@@ -54,7 +54,7 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
     def _load_data(self):
         """Load data from the JSON file."""
         try:
-            with open(self.data_file_path, 'r', encoding='utf-8') as f:
+            with importlib.resources.open_text("src", self.data_file_path) as f:
                 data = json.load(f)
                 self.level_hints = data.get("level_hints", {})
                 self.command_explanations = data.get("command_explanations", {})
