@@ -6,7 +6,7 @@ from datetime import datetime
 
 from textual.app import Notify
 class BanditAIMentor:
-    def __init__(self, notify_callback: Callable[[str, str], None], model: str = None, data_file_path: str = "src/ai_mentor_data.json"):
+    def __init__(self, notify_callback: Callable[[str, str], None], model: str = None, data_file_path: str = "ai_mentor_data.json"):
         # Check if OpenAI API key is set
         self.notify = notify_callback
         self.model: str = model or os.getenv("OPENAI_MODEL", "ollama/llama3.2")
