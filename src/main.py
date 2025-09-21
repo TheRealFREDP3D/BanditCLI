@@ -290,8 +290,7 @@ class BanditCLIApp(App):
 
     def on_resize(self, event):
         """Handle terminal resize events."""
-        connection = self.ssh_manager.get_connection(self.session_id)
-        if connection:
+        if connection := self.ssh_manager.get_connection(self.session_id):
             connection.resize_pty(width=event.size.width, height=event.size.height - 10)
 
 if __name__ == "__main__":
