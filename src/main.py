@@ -157,7 +157,7 @@ class BanditCLIApp(App):
         
         username = username_input.value
         password = password_input.value
-        port = port_input.value if port_input.value else "2220"
+        port = port_input.value or "2220"
         timeout_str = timeout_input.value if timeout_input.value else "10"
         
         if not username or not password:
