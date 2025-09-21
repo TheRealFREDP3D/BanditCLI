@@ -245,7 +245,7 @@ class BanditCLIApp(App):
         self.loading = True
 
         mentor_chat = self.query_one("#mentor_chat", TextArea)
-        current_text = mentor_chat.text if mentor_chat.text else ""
+        current_text = mentor_chat.text or ""
         mentor_chat.load_text(f"{current_text}\nYou: {message}\nMentor: ")
 
         # Get AI response
