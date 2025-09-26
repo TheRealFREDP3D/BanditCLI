@@ -31,13 +31,18 @@ Header {
 /* Command input styling */
 #command_input {
     width: 80%;
-    margin: 1 0;
+    margin: 1 0 1 1;
+    display: block;
+    background: $surface;
+    color: $text;
+    border: solid $secondary;
 }
 
 /* Send button styling */
 #send_button {
-    width: 20%;
-    margin: 1 0;
+    width: 15%;
+    margin: 1 1 1 0;
+    min-width: 80px;
 }
 
 /* Level info styling */
@@ -65,14 +70,13 @@ Header {
     width: 20%;
     margin: 1 0;
 }
-
 /* Button styling */
 Button {
     margin: 1 0;
 }
 
 #ssh-controls {
-    align: bottom;
+    align: left bottom;
     margin: 1 0;
 }
 
@@ -87,10 +91,24 @@ Button {
 
 #command-controls {
     align: center middle;
+    dock: bottom;
+    width: 100%;
+    height: auto;
+    margin: 1 0 0 0;
+    padding: 1 0;
+    background: $background;
+    border-top: solid $secondary;
 }
 
 #command-controls > Input {
-    width: 1fr;
+    width: 80%;
+    margin: 0 1 0 0;
+}
+
+#command-controls > Label {
+    width: auto;
+    margin: 0 1 0 1;
+    min-width: 80px;
 }
 
 /* Label styling */

@@ -1,77 +1,22 @@
-graph TD
+# BanditCLI - The OverTheWire Bandit Wargame CLI Tool
 
-%% === STYLES ===
-classDef ui fill:#ADD8E6,stroke:#000,color:#000,stroke-width:2px,rx:10px,ry:10px;
-classDef ssh fill:#90EE90,stroke:#000,color:#000,stroke-width:2px,rx:10px,ry:10px;
-classDef data fill:#FFD700,stroke:#000,color:#000,stroke-width:2px,rx:10px,ry:10px;
-classDef ai fill:#FFB6C1,stroke:#000,color:#000,stroke-width:2px,rx:10px,ry:10px;
-classDef ext fill:#FF69B4,stroke:#000,color:#000,stroke-width:2px,rx:10px,ry:10px;
+## Overview 
+This project is a command-line tool for playing the OverTheWire Bandit wargame. It's built with Python and the Textual framework, providing a user-friendly interface within the terminal.
 
-%% === User Interface Layer ===
-subgraph "User Interface Layer"
-  BanditCLIApp["BanditCLIApp<br/>Main Application Class"]:::ui
-  Header["Header Widget"]:::ui
-  Footer["Footer Widget"]:::ui
-  TabbedContent["Tabbed Content Widget"]:::ui
-  TextArea["Text Area Widget"]:::ui
-  Input["Input Widget"]:::ui
-  Button["Button Widget"]:::ui
-  Label["Label Widget"]:::ui
+---
 
-  BanditCLIApp -->|"manages"| Header
-  BanditCLIApp -->|"manages"| Footer
-  BanditCLIApp -->|"manages"| TabbedContent
-  BanditCLIApp -->|"manages"| TextArea
-  BanditCLIApp -->|"manages"| Input
-  BanditCLIApp -->|"manages"| Button
-  BanditCLIApp -->|"manages"| Label
-end
+## Architecture
 
-%% === SSH Management Layer ===
-subgraph "SSH Management Layer"
-  SSHConnection["SSHConnection<br/>Manages Single SSH Session"]:::ssh
-  SSHManager["SSHManager<br/>Manages Multiple SSH Sessions"]:::ssh
+Here's a breakdown of its architecture:
 
-  BanditCLIApp -->|"creates SSH session"| SSHManager
-  SSHManager -->|"creates"| SSHConnection
-end
+`main.py`: This is the core of the application. It uses the Textual framework to create the tabbed layout you see when you run it. It handles user input and coordinates the other components.
 
-%% === Level Data Layer ===
-subgraph "Level Data Layer"
-  BanditLevelInfo["BanditLevelInfo<br/>Handles Level Data"]:::data
+`ssh_manager.py`: This module manages the SSH connection to the Bandit game server. It's responsible for connecting, sending your commands, and receiving the output.
 
-  BanditCLIApp -->|"loads level data"| BanditLevelInfo
-end
+`level_info.py`: This component loads and displays information about each Bandit level, like the goals and recommended commands. It gets this data from the bandit_levels.json file.
 
-%% === AI Mentoring Layer ===
-subgraph "AI Mentoring Layer"
-  BanditAIMentor["BanditAIMentor<br/>Generates Hints and Guidance"]:::ai
+`ai_mentor.py`: This is the AI assistant. It uses OpenAI's GPT-3.5 to give you hints based on your current level and the commands you've recently used.
 
-  BanditCLIApp -->|"requests AI guidance"| BanditAIMentor
-end
+`app.tcss`: This file styles the application, defining its colors and layout to make it look good in your terminal.
 
-%% === External Dependencies ===
-subgraph "External Dependencies"
-  Paramiko["Paramiko<br/>SSH Client Library"]:::ext
-  OpenAI["OpenAI API<br/>Generates AI Responses"]:::ext
-  Dotenv["Dotenv<br/>Loads Environment Variables"]:::ext
-  BanditLevelsJSON["bandit_levels.json<br/>Static Level Data"]:::ext
-
-  SSHManager -->|"uses"| Paramiko
-  BanditAIMentor -->|"uses"| OpenAI
-  BanditAIMentor -->|"loads config"| Dotenv
-  BanditLevelInfo -->|"loads data from"| BanditLevelsJSON
-end
-
-%% === User Interaction Flow ===
-User(("User")) -->|"interacts with"| BanditCLIApp
-User -->|"connects via SSH"| SSHManager
-User -->|"executes commands"| SSHConnection
-User -->|"navigates levels"| BanditLevelInfo
-User -->|"asks for hints"| BanditAIMentor
-
-%% === Data and Control Flow ===
-SSHConnection -->|"sends commands"| SSHManager
-SSHManager -->|"returns output"| BanditCLIApp
-BanditLevelInfo -->|"provides level info"| BanditCLIApp
-BanditAIMentor -->|"returns hints"| BanditCLIApp
+`bandit_levels.json`: This file is a database of all the Bandit level information, which is displayed in the "Level Info" tab.
