@@ -3,6 +3,22 @@ import threading
 import time
 import socket
 from typing import Optional, Callable
+from enum import Enum
+
+class SSHConnectionError(Enum):
+    """Enumeration of SSH connection error types."""
+    AUTHENTICATION_FAILED = "Authentication failed"
+    TIMEOUT = "Connection timeout"
+    NETWORK_ERROR = "Network error"
+    HOST_UNKNOWN = "Unknown host"
+    GENERIC_ERROR = "Connection failed"
+
+class SSHConnectionException(Exception):
+    """Custom exception for SSH connection errors."""
+    def __init__(self, error_type: SSHConnectionError, message: str = None):
+        self.error_type = error_type
+        self.message = message or error_type.value
+        super().__init__(self.message)
 
 class SSHConnection:
     def __init__(self, hostname: str, port: int, username: str, password: str, notify_callback: Callable[[str, str], None], timeout: int = 10):
@@ -19,6 +35,7 @@ class SSHConnection:
         self.notify = notify_callback
         self.timeout = timeout
         
+<<<<<<< HEAD
     def connect(self) -> bool:
         """Establish SSH connection"""
         try:
@@ -46,6 +63,58 @@ class SSHConnection:
         except (paramiko.AuthenticationException, paramiko.SSHException, TimeoutError) as e:
             self.notify(f"SSH connection failed: {e}", "error")
             return False
+=======
+    def _create_ssh_client(self) -> None:
+        """Create and configure SSH client with connection parameters."""
+        self.client = paramiko.SSHClient()
+        self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.client.connect(
+            hostname=self.hostname,
+            port=self.port,
+            username=self.username,
+            password=self.password,
+            timeout=10
+        )
+
+    def _create_shell_channel(self) -> None:
+        """Create and configure an interactive shell channel."""
+        self.channel = self.client.invoke_shell()
+        self.channel.settimeout(0.1)
+        self.connected = True
+        self.start_reading()
+
+    def connect(self, retries: int = 3) -> bool:
+        """Establish SSH connection with retry mechanism"""
+        for attempt in range(retries):
+            try:
+                self._create_ssh_client()
+                self._create_shell_channel()
+                return True
+                
+            except paramiko.AuthenticationException:
+                print(f"SSH connection failed: Authentication failed for user {self.username}")
+                return False  # Don't retry on authentication failures
+            except paramiko.SSHException as e:
+                if "timed out" in str(e).lower():
+                    print(f"SSH connection failed: Connection timeout when connecting to {self.hostname}:{self.port}")
+                else:
+                    print(f"SSH connection failed: SSH error - {e}")
+                if attempt < retries - 1:
+                    print(f"Retrying connection... ({attempt + 1}/{retries - 1})")
+                    time.sleep(1)
+            except TimeoutError:
+                print(f"SSH connection failed: Connection timeout when connecting to {self.hostname}:{self.port}")
+                if attempt < retries - 1:
+                    print(f"Retrying connection... ({attempt + 1}/{retries - 1})")
+                    time.sleep(1)
+            except Exception as e:
+                print(f"SSH connection failed: {e}")
+                if attempt < retries - 1:
+                    print(f"Retrying connection... ({attempt + 1}/{retries - 1})")
+                    time.sleep(1)
+        
+        return False
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
     
     def start_reading(self):
         """Start background thread to read SSH output"""
@@ -109,13 +178,22 @@ class SSHManager:
         self.notify = notify_callback
     
     def create_connection(self, session_id: str, hostname: str, port: int, 
+<<<<<<< HEAD
                          username: str, password: str, timeout: int = 10) -> bool:
+=======
+                         username: str, password: str, retries: int = 3) -> bool:
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
         """Create new SSH connection"""
         if session_id in self.connections:
             self.disconnect_session(session_id)
         
+<<<<<<< HEAD
         connection = SSHConnection(hostname, port, username, password, self.notify, timeout)
         if connection.connect():
+=======
+        connection = SSHConnection(hostname, port, username, password)
+        if connection.connect(retries=retries):
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
             self.connections[session_id] = connection
             return True
         return False

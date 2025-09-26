@@ -5,7 +5,12 @@ import importlib
 from typing import List, Dict, Optional, Callable
 from datetime import datetime
 
+<<<<<<< HEAD
 from textual.app import Notify
+=======
+from cache import cache
+
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
 class BanditAIMentor:
     def __init__(self, notify_callback: Callable[[str, str], None], model: str = None, data_file_path: str = "ai_mentor_data.json"):
         self.notify = notify_callback
@@ -149,10 +154,68 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
     
     def get_level_hint(self, level_num: int) -> str:
         """Get a general hint for a specific level without spoilers"""
+<<<<<<< HEAD
         return self.level_hints.get(str(level_num),
+=======
+        # Try to get from cache first
+        cache_key = f"level_hint_{level_num}"
+        cached_hint = cache.get(cache_key)
+        if cached_hint is not None:
+            return cached_hint
+        
+        level_hints = {
+            0: "This level is about connecting to the game server using SSH. Think about what information you need to establish a secure connection.",
+            1: "Look for files in your current directory. What commands can help you see what's available?",
+            2: "Sometimes files have unusual names that make them tricky to access. How do you handle special characters in filenames?",
+            3: "Hidden files in Linux start with a dot. How can you see all files, including hidden ones?",
+            4: "When you have many files, you might need to examine their contents or properties to find what you're looking for.",
+            5: "File properties like size, permissions, and type can help you identify the right file among many options.",
+        }
+        
+        hint = level_hints.get(level_num, 
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
             "Think about what the level description is asking you to find or do. Break down the problem into smaller steps.")
+        
+        # Cache the result for 1 hour
+        cache.set(cache_key, hint, ttl=3600)
+        
+        return hint
     
+    import hashlib
+
     def explain_command(self, command: str) -> str:
         """Provide educational explanation of a command"""
+<<<<<<< HEAD
         return self.command_explanations.get(command.lower(),
             f"'{command}' is a Linux command. Try 'man {command}' to learn more about it.")
+=======
+        # Try to get from cache first
+        command_hash = hashlib.sha256(command.encode('utf-8')).hexdigest()
+        cache_key = f"command_explanation_{command_hash}"
+        cached_explanation = cache.get(cache_key)
+        if cached_explanation is not None:
+            return cached_explanation
+        
+        command_explanations = {
+            "ls": "Lists directory contents. Try 'ls -la' to see all files including hidden ones with detailed information.",
+            "cat": "Displays file contents. Use it to read text files.",
+            "cd": "Changes directory. 'cd ..' goes up one level, 'cd ~' goes to home directory.",
+            "pwd": "Shows your current directory path.",
+            "find": "Searches for files and directories. Very powerful with many options for filtering.",
+            "grep": "Searches for text patterns within files.",
+            "file": "Determines file type. Useful when file extensions are misleading or missing.",
+            "du": "Shows disk usage. Can help find files by size.",
+            "ssh": "Secure Shell - used to connect to remote systems securely.",
+        }
+        
+        explanation = command_explanations.get(command.lower(), 
+            f"'{command}' is a Linux command. Try 'man {command}' to learn more about it.")
+        
+        # Cache the result for 1 hour
+        cache.set(cache_key, explanation, ttl=3600)
+        
+        return explanation
+
+# Global instance
+ai_mentor = BanditAIMentor()
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c

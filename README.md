@@ -5,6 +5,10 @@ A terminal-based interface for playing the OverTheWire Bandit wargame, built wit
 - SSH Terminal Interface: Real-time SSH connection to the Bandit server
 - Level Information Display: View level goals, recommended commands, and reading materials
 - AI Mentor System: Get contextual hints and guidance without revealing solutions
+- Command History: Navigate through previously entered commands
+- Session Management: Save and switch between multiple sessions
+- Offline Mode: Access level information and review sessions without internet
+- Caching: Improved performance through intelligent caching of frequently accessed data
 
 ## Features
 
@@ -13,17 +17,42 @@ A terminal-based interface for playing the OverTheWire Bandit wargame, built wit
 - Interactive terminal interface with full terminal emulation
 - Connection status indicators and authentication management
 - Username, password, and port input fields for flexible connection settings
+- Command history navigation with up/down arrow keys
 
 ### 📚 Level Information Display
 - View level objectives, recommended commands, and learning materials
 - Navigate between different levels
 - Clean, organized presentation
+- Cached for improved performance
 
 ### 🤖 AI Mentor System
 - OpenAI GPT-3.5 integration for intelligent guidance
 - Context-aware responses based on current level and recent commands
 - Hint system that provides guidance without revealing solutions
 - Interactive chat interface with conversation history
+
+### 📜 Command History
+- Persistent command history across sessions
+- Navigate through previous commands with up/down arrow keys
+- Configurable history size limit
+- Automatic deduplication of commands
+
+### 💾 Session Management
+- Create and manage multiple sessions
+- Save session information including hostname, port, username, and current level
+- Switch between sessions
+- Persistent session storage
+
+### 🌐 Offline Mode
+- Access level information without internet connection
+- Review command history and previous sessions
+- Work with cached level data
+- Toggle offline mode with keyboard shortcut
+
+### ⚡ Performance Optimizations
+- Intelligent caching of level information, AI hints, and command explanations
+- File-based cache with expiration
+- Reduced API calls through caching
 
 ## Installation
 
@@ -78,6 +107,12 @@ You can switch between tabs using:
 3. Once connected, you can enter commands in the terminal input field
 4. Use the "Disconnect" button to close the SSH connection
 
+### Command History
+
+- Use the up/down arrow keys in the command input field to navigate through command history
+- Command history is persistent across sessions
+- History is automatically saved and loaded
+
 ### Level Navigation
 
 In the Level Info tab:
@@ -91,6 +126,19 @@ In the AI Mentor tab:
 - The AI mentor will provide hints and guidance based on the current level and context
 - View the conversation history in the chat display
 
+### Session Management
+
+- Sessions are automatically created and saved when you connect to a server
+- Session information includes hostname, port, username, and current level
+- Sessions persist across application restarts
+
+### Offline Mode
+
+- Press `o` to toggle offline mode
+- In offline mode, you can view level information and review previous sessions
+- SSH connections and AI mentor are disabled in offline mode
+- The application subtitle indicates when offline mode is active
+
 ## Keyboard Shortcuts
 
 - `d`: Toggle dark mode
@@ -98,6 +146,7 @@ In the AI Mentor tab:
 - `1`: Switch to Terminal tab
 - `2`: Switch to Level Info tab
 - `3`: Switch to AI Mentor tab
+- `o`: Toggle offline mode
 
 ## Project Structure
 
@@ -108,8 +157,11 @@ bandit-cli-app/
 │   ├── ssh_manager.py       # SSH connection management
 │   ├── ai_mentor.py         # AI mentor functionality
 │   ├── level_info.py        # Level information handling
+│   ├── command_history.py   # Command history management
+│   ├── session_manager.py   # Session management
+│   ├── cache.py             # Caching utilities
+│   ├── config.py            # Configuration management
 │   ├── app.tcss             # CSS styling for the application
-│   ├── app_design.md        # Application design documentation
 ├── bandit_levels.json       # Level data scraped from OverTheWire
 ├── requirements.txt         # Python dependencies
 ├── README.md               # This file
@@ -122,6 +174,7 @@ bandit-cli-app/
 - **SSH Client**: Paramiko for secure connections
 - **AI Integration**: OpenAI API (GPT-3.5)
 - **Data**: JSON file containing scraped level data from OverTheWire
+- **Caching**: File-based caching system for improved performance
 
 ## Contributing
 

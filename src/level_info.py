@@ -3,7 +3,12 @@ import os
 from typing import Dict, List, Optional, Callable
 import importlib.resources
 
+<<<<<<< HEAD
 from textual.app import Notify
+=======
+from cache import cache
+
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
 class BanditLevelInfo:
     def __init__(self, levels_file_path: str = "bandit_levels.json", notify_callback: Callable[[str, str], None] = None):
         self.levels_file_path = levels_file_path
@@ -22,8 +27,21 @@ class BanditLevelInfo:
     
     def get_level_info(self, level_num: int) -> Optional[Dict]:
         """Get information for a specific level"""
+        # Try to get from cache first
+        cache_key = f"level_info_{level_num}"
+        cached_info = cache.get(cache_key)
+        if cached_info is not None:
+            return cached_info
+        
+        # If not in cache, get from data and cache it
         level_key = str(level_num)
-        return self.levels_data.get(level_key)
+        level_info = self.levels_data.get(level_key)
+        
+        # Cache the result for 1 hour
+        if level_info is not None:
+            cache.set(cache_key, level_info, ttl=3600)
+        
+        return level_info
     
     def get_all_levels(self) -> Dict:
         """Get information for all levels"""
@@ -31,27 +49,30 @@ class BanditLevelInfo:
     
     def get_level_goal(self, level_num: int) -> str:
         """Get the goal for a specific level"""
-        level_info = self.get_level_info(level_num)
-        if level_info:
+        if level_info := self.get_level_info(level_num):
             return level_info.get("goal", "Level information not available")
         return "Level information not available"
     
     def get_recommended_commands(self, level_num: int) -> List[str]:
         """Get recommended commands for a specific level"""
-        level_info = self.get_level_info(level_num)
-        if level_info:
+        if level_info := self.get_level_info(level_num):
             return level_info.get("commands", [])
         return []
     
     def get_reading_materials(self, level_num: int) -> List[Dict[str, str]]:
         """Get reading materials for a specific level"""
-        level_info = self.get_level_info(level_num)
-        if level_info:
+        if level_info := self.get_level_info(level_num):
             return level_info.get("reading_material", [])
         return []
     
     def format_level_info(self, level_num: int) -> str:
         """Format level information as a readable string"""
+        # Try to get from cache first
+        cache_key = f"formatted_level_info_{level_num}"
+        cached_info = cache.get(cache_key)
+        if cached_info is not None:
+            return cached_info
+        
         level_info = self.get_level_info(level_num)
         if not level_info:
             return f"Level {level_num} information not available"
@@ -83,5 +104,8 @@ class BanditLevelInfo:
                 elif title:
                     formatted_info += f"- {title}\n"
             formatted_info += "\n"
+        
+        # Cache the result for 1 hour
+        cache.set(cache_key, formatted_info, ttl=3600)
         
         return formatted_info
