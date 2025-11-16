@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from textual.app import App
-from textual.widgets import Header, Footer, TabbedContent, TabPane, TextArea, Input, Button, Label
+from textual.widgets import Header, Footer, TabbedContent, TabPane, TextArea, Input, Button, Label, LoadingIndicator
 from textual.containers import Container, Horizontal, Vertical
 from textual.reactive import reactive
 from textual.binding import Binding
@@ -35,7 +35,7 @@ class CommandInput(Input):
             self.command_history.reset_index()
 
 from ssh_manager import SSHManager
-from ai_mentor import ai_mentor
+from ai_mentor import BanditAIMentor
 from level_info import BanditLevelInfo
 from command_history import CommandHistory
 from config import ConfigManager
@@ -67,6 +67,25 @@ class BanditCLIApp(App):
         self.session_id = "default"
         self.recent_commands = []
         self.terminal_output = ""
+<<<<<<< HEAD
+        self.ssh_manager = SSHManager(notify_callback=self.notify)
+        self.level_info = BanditLevelInfo(notify_callback=self.notify)
+        self.ai_mentor = BanditAIMentor(notify_callback=self.notify)
+        self.ssh_connected = reactive(False)
+        self.loading = reactive(False)
+
+    def watch_ssh_connected(self, connected: bool):
+        """Called when the ssh_connected reactive property changes."""
+        self.query_one("#ssh_connect", Button).disabled = connected
+        self.query_one("#ssh_disconnect", Button).disabled = not connected
+        self.query_one("#command_input", Input).disabled = not connected
+        self.query_one("#send_button", Button).disabled = not connected
+
+    def watch_loading(self, loading: bool):
+        """Called when the loading reactive property changes."""
+        for indicator in self.query(LoadingIndicator):
+            indicator.display = loading
+=======
         self.ssh_manager = SSHManager()
         self.level_info = BanditLevelInfo()
         self.ssh_connected = False
@@ -76,6 +95,7 @@ class BanditCLIApp(App):
             history_file=os.path.expanduser("~/.bandit_cli/command_history.json")
         )
         self.offline_mode = False
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
     
     def compose(self):
         """Create child widgets for the app."""
@@ -93,16 +113,26 @@ class BanditCLIApp(App):
     
     def compose_terminal_view(self):
         """Compose the terminal view."""
-        with Vertical():
+        with Vertical(id="terminal-view"):
+            yield LoadingIndicator()
             yield TextArea(id="terminal_output", read_only=True)
-            with Horizontal():
-                yield Label("SSH Login:")
-                yield Input(placeholder="bandit0", id="ssh_username")
-                yield Input(placeholder="bandit0", id="ssh_password")
-                yield Input(placeholder="2220", id="ssh_port")
-                yield Button("Connect", variant="primary", id="ssh_connect")
-                yield Button("Disconnect", variant="error", id="ssh_disconnect")
-            with Horizontal():
+            with Horizontal(id="ssh-controls"):
+                with Vertical():
+                    yield Label("Username:")
+                    yield Input(placeholder="bandit0", id="ssh_username")
+                with Vertical():
+                    yield Label("Password:")
+                    yield Input(placeholder="bandit0", id="ssh_password", password=True)
+                with Vertical():
+                    yield Label("Port:")
+                    yield Input(placeholder="2220", id="ssh_port")
+                with Vertical():
+                    yield Label("Timeout:")
+                    yield Input(placeholder="10", id="ssh_timeout")
+                with Vertical(id="ssh-buttons"):
+                    yield Button("Connect", variant="primary", id="ssh_connect")
+                    yield Button("Disconnect", variant="error", id="ssh_disconnect")
+            with Horizontal(id="command-controls"):
                 yield Label("Command:")
                 yield CommandInput(self.command_history, placeholder="Enter command...", id="command_input")
                 yield Button("Send", variant="primary", id="send_button")
@@ -118,6 +148,7 @@ class BanditCLIApp(App):
     def compose_mentor_view(self):
         """Compose the AI mentor view."""
         with Vertical():
+            yield LoadingIndicator()
             yield TextArea(id="mentor_chat", read_only=True)
             with Horizontal():
                 yield Input(placeholder="Ask the AI mentor...", id="mentor_input")
@@ -130,6 +161,11 @@ class BanditCLIApp(App):
         
         # Initialize the level info
         self.update_level_info()
+
+        # Initial state of buttons
+        self.query_one("#ssh_disconnect", Button).disabled = True
+        self.query_one("#command_input", Input).disabled = True
+        self.query_one("#send_button", Button).disabled = True
     
     def watch_offline_mode(self, offline_mode: bool):
         """Watch for changes to offline_mode and update the subtitle."""
@@ -168,28 +204,37 @@ class BanditCLIApp(App):
     
     def connect_ssh(self):
         """Connect to the SSH server."""
+<<<<<<< HEAD
+        self.loading = True
+=======
         # Check if we're in offline mode
         if self.offline_mode:
             self.notify("Cannot connect in offline mode", severity="error")
             return
         
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
         username_input = self.query_one("#ssh_username", Input)
         password_input = self.query_one("#ssh_password", Input)
         port_input = self.query_one("#ssh_port", Input)
+        timeout_input = self.query_one("#ssh_timeout", Input)
         
         username = username_input.value
         password = password_input.value
-        port = port_input.value if port_input.value else "2220"  # Default to 2220 if empty
+        port = port_input.value or "2220"
+        timeout_str = timeout_input.value if timeout_input.value else "10"
         
         if not username or not password:
             self.notify("Please enter both username and password", severity="error")
+            self.loading = False
             return
         
-        # Convert port to integer
+        # Convert port and timeout to integer
         try:
             port_int = int(port)
+            timeout_int = int(timeout_str)
         except ValueError:
-            self.notify("Port must be a valid number", severity="error")
+            self.notify("Port and timeout must be valid numbers", severity="error")
+            self.loading = False
             return
             
         # Validate port range
@@ -216,7 +261,11 @@ class BanditCLIApp(App):
             port_int,
             username,
             password,
+<<<<<<< HEAD
+            timeout=timeout_int
+=======
             retries=3
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
         )
         
         if success:
@@ -227,7 +276,12 @@ class BanditCLIApp(App):
             if connection:
                 connection.set_output_callback(self.on_ssh_output)
         else:
+<<<<<<< HEAD
+            self.notify("Failed to establish SSH connection", severity="error")
+        self.loading = False
+=======
             self.notify("Failed to establish SSH connection. Please check your credentials, network connection, and ensure the Bandit server is accessible.", severity="error")
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
     
     def disconnect_ssh(self):
         """Disconnect from the SSH server."""
@@ -307,6 +361,22 @@ class BanditCLIApp(App):
             self.notify("Message is too long (maximum 1000 characters)", severity="error")
             return
         
+<<<<<<< HEAD
+        self.loading = True
+
+        mentor_chat = self.query_one("#mentor_chat", TextArea)
+        current_text = mentor_chat.text or ""
+        mentor_chat.load_text(f"{current_text}\nYou: {message}\nMentor: ")
+
+        # Get AI response
+        response_stream = self.ai_mentor.get_response(
+            message,
+            self.session_id,
+            self.current_level,
+            self.recent_commands,
+            self.terminal_output
+        )
+=======
         try:
             # Get AI response
             response = ai_mentor.get_response(
@@ -344,16 +414,16 @@ class BanditCLIApp(App):
         
         # Provide a default offline response
         response = "AI mentor is not available in offline mode. Please connect to the internet and disable offline mode to use the AI mentor."
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
         
         # Update chat display
-        mentor_chat = self.query_one("#mentor_chat", TextArea)
-        current_text = mentor_chat.text if mentor_chat.text else ""
-        new_text = f"{current_text}\nYou: {message}\nMentor: {response}"
-        mentor_chat.load_text(new_text)
-        mentor_chat.scroll_end(animate=False)
+        for chunk in response_stream:
+            mentor_chat.load_text(mentor_chat.text + chunk)
+            mentor_chat.scroll_end(animate=False)
         
         # Clear the input
         mentor_input.value = ""
+        self.loading = False
     
     def previous_level(self):
         """Go to the previous level."""
@@ -397,6 +467,11 @@ class BanditCLIApp(App):
                 self.disconnect_ssh()
         else:
             self.notify("Offline mode disabled", severity="information")
+
+    def on_resize(self, event):
+        """Handle terminal resize events."""
+        if connection := self.ssh_manager.get_connection(self.session_id):
+            connection.resize_pty(width=event.size.width, height=event.size.height - 10)
 
 if __name__ == "__main__":
     app = BanditCLIApp()

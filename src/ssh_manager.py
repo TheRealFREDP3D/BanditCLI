@@ -1,6 +1,7 @@
 import paramiko
 import threading
 import time
+import socket
 from typing import Optional, Callable
 from enum import Enum
 
@@ -20,18 +21,49 @@ class SSHConnectionException(Exception):
         super().__init__(self.message)
 
 class SSHConnection:
-    def __init__(self, hostname: str, port: int, username: str, password: str):
+    def __init__(self, hostname: str, port: int, username: str, password: str, notify_callback: Callable[[str, str], None], timeout: int = 10):
         self.hostname = hostname
         self.port = port
         self.username = username
         self.password = password
-        self.client = None
-        self.channel = None
+        self.client: Optional[paramiko.SSHClient] = None
+        self.channel: Optional[paramiko.Channel] = None
         self.connected = False
-        self.output_callback = None
-        self.read_thread = None
+        self.output_callback: Optional[Callable[[str], None]] = None
+        self.read_thread: Optional[threading.Thread] = None
         self.stop_reading = False
+        self.notify = notify_callback
+        self.timeout = timeout
         
+<<<<<<< HEAD
+    def connect(self) -> bool:
+        """Establish SSH connection"""
+        try:
+            self.client = paramiko.SSHClient()
+            self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            
+            self.client.connect(
+                hostname=self.hostname,
+                port=self.port,
+                username=self.username,
+                password=self.password,
+                timeout=self.timeout
+            )
+            
+            # Create interactive shell
+            self.channel = self.client.invoke_shell(term='xterm-color', width=80, height=24)
+            self.channel.settimeout(0.1)
+            self.connected = True
+            
+            # Start reading output in background
+            self.start_reading()
+            
+            return True
+            
+        except (paramiko.AuthenticationException, paramiko.SSHException, TimeoutError) as e:
+            self.notify(f"SSH connection failed: {e}", "error")
+            return False
+=======
     def _create_ssh_client(self) -> None:
         """Create and configure SSH client with connection parameters."""
         self.client = paramiko.SSHClient()
@@ -82,6 +114,7 @@ class SSHConnection:
                     time.sleep(1)
         
         return False
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
     
     def start_reading(self):
         """Start background thread to read SSH output"""
@@ -94,14 +127,13 @@ class SSHConnection:
         """Background thread function to continuously read SSH output"""
         while not self.stop_reading and self.connected:
             try:
-                if self.channel and self.channel.recv_ready():
+                if self.channel:
                     data = self.channel.recv(1024).decode('utf-8', errors='ignore')
                     if data and self.output_callback:
                         self.output_callback(data)
-                time.sleep(0.01)  # Small delay to prevent high CPU usage
-            except Exception as e:
+            except (socket.timeout, Exception) as e:
                 if not self.stop_reading:
-                    print(f"Error reading SSH output: {e}")
+                    self.notify(f"Error reading SSH output: {e}", "error")
                 break
     
     def send_command(self, command: str):
@@ -110,20 +142,30 @@ class SSHConnection:
             try:
                 self.channel.send(command)
             except Exception as e:
-                print(f"Error sending command: {e}")
+                self.notify(f"Error sending command: {e}", "error")
     
     def set_output_callback(self, callback: Callable[[str], None]):
         """Set callback function for SSH output"""
         self.output_callback = callback
     
+    def resize_pty(self, width: int, height: int):
+        """Resize the PTY"""
+        if self.channel and self.connected:
+            try:
+                self.channel.resize_pty(width=width, height=height)
+            except paramiko.SSHException as e:
+                self.notify(f"Error resizing PTY: {e}", "error")
+
     def disconnect(self):
         """Close SSH connection"""
         self.stop_reading = True
         self.connected = False
         
         if self.read_thread:
-            self.read_thread.join(timeout=1)
-        
+            self.read_thread.join(timeout=2)
+            if self.read_thread.is_alive():
+                self.notify("Warning: SSH reading thread did not exit gracefully.", "warning")
+
         if self.channel:
             self.channel.close()
         
@@ -131,17 +173,27 @@ class SSHConnection:
             self.client.close()
 
 class SSHManager:
-    def __init__(self):
+    def __init__(self, notify_callback: Callable[[str, str], None]):
         self.connections = {}
+        self.notify = notify_callback
     
     def create_connection(self, session_id: str, hostname: str, port: int, 
+<<<<<<< HEAD
+                         username: str, password: str, timeout: int = 10) -> bool:
+=======
                          username: str, password: str, retries: int = 3) -> bool:
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
         """Create new SSH connection"""
         if session_id in self.connections:
             self.disconnect_session(session_id)
         
+<<<<<<< HEAD
+        connection = SSHConnection(hostname, port, username, password, self.notify, timeout)
+        if connection.connect():
+=======
         connection = SSHConnection(hostname, port, username, password)
         if connection.connect(retries=retries):
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
             self.connections[session_id] = connection
             return True
         return False

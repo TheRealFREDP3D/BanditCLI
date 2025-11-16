@@ -1,33 +1,28 @@
 import json
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Callable
+import importlib.resources
 
+<<<<<<< HEAD
+from textual.app import Notify
+=======
 from cache import cache
 
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
 class BanditLevelInfo:
-    def __init__(self, levels_file_path: str = "bandit_levels.json"):
+    def __init__(self, levels_file_path: str = "bandit_levels.json", notify_callback: Callable[[str, str], None] = None):
         self.levels_file_path = levels_file_path
+        self.notify = notify_callback
         self.levels_data = self._load_levels_data()
     
     def _load_levels_data(self) -> Dict:
         """Load level data from JSON file"""
         try:
-            # First try to load from the current directory
-            if os.path.exists(self.levels_file_path):
-                with open(self.levels_file_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            
-            # If not found, try to load from the same directory as this file
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            levels_file = os.path.join(current_dir, "..", "bandit_levels.json")
-            if os.path.exists(levels_file):
-                with open(levels_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-                    
-            print("Warning: Could not find bandit_levels.json file")
-            return {}
-        except Exception as e:
-            print(f"Error loading level data: {e}")
+            with importlib.resources.open_text("src", self.levels_file_path) as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            if self.notify:
+                self.notify(f"Error loading level data: {e}", "error")
             return {}
     
     def get_level_info(self, level_num: int) -> Optional[Dict]:

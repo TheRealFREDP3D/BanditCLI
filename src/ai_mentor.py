@@ -1,24 +1,32 @@
-import openai
+import litellm
 import os
 import json
-from typing import List, Dict, Optional
+import importlib
+from typing import List, Dict, Optional, Callable
 from datetime import datetime
 
+<<<<<<< HEAD
+from textual.app import Notify
+=======
 from cache import cache
 
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
 class BanditAIMentor:
-    def __init__(self):
-        # Check if OpenAI API key is set
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key or api_key == "your-openai-api-key-here":
-            self.client = None
-            self.disabled = True
-        else:
-            # OpenAI client is already configured via environment variables
-            self.client = openai.OpenAI()
-            self.disabled = False
+    def __init__(self, notify_callback: Callable[[str, str], None], model: str = None, data_file_path: str = "ai_mentor_data.json"):
+        self.notify = notify_callback
+        self.model: str = model or os.getenv("OPENAI_MODEL", "ollama/llama3.2")
+        self.data_file_path: str = data_file_path
+        self.level_hints: Dict[str, str] = {}
+        self.command_explanations: Dict[str, str] = {}
+        self._load_data()
+
+        # LiteLLM can handle different providers, so we don't need a specific client instance.
+        # We can check for a general API key, but since we are defaulting to a local model,
+        # we might not need one. For now, we'll assume that if a user wants to use a
+        # different model, they will set the appropriate environment variables.
+        self.disabled = False
             
-        self.conversation_history = {}
+        self.conversation_history: Dict[str, List[Dict[str, str]]] = {}
         
         # System prompt for the AI mentor
         self.system_prompt = """You are an AI mentor for the OverTheWire Bandit wargame, designed to help beginners learn cybersecurity and Linux command line skills. Your role is to provide guidance, hints, and educational context WITHOUT giving direct solutions.
@@ -48,13 +56,26 @@ CONTEXT AWARENESS:
 
 Remember: Your goal is to teach and guide, not to solve problems for the user. Help them become better problem solvers and Linux users."""
 
+    def _load_data(self):
+        """Load data from the JSON file."""
+        try:
+            with importlib.resources.open_text("src", self.data_file_path) as f:
+                data = json.load(f)
+                self.level_hints = data.get("level_hints", {})
+                self.command_explanations = data.get("command_explanations", {})
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            self.notify(f"Error loading AI mentor data: {e}", "error")
+            self.level_hints = {}
+            self.command_explanations = {}
+
     def get_response(self, user_message: str, session_id: str = "default", 
                     current_level: int = 0, recent_commands: List[str] = None,
-                    terminal_output: str = "") -> str:
+                    terminal_output: str = ""):
         """Generate AI mentor response"""
         # If AI is disabled, return a default message
         if self.disabled:
-            return "AI mentor is currently disabled. Please set your OpenAI API key in the .env file to enable this feature."
+            yield "AI mentor is currently disabled. Please set your OpenAI API key in the .env file to enable this feature."
+            return
         
         try:
             # Initialize conversation history for new sessions
@@ -94,14 +115,20 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             messages.append({"role": "user", "content": user_message})
             
             # Generate response
-            response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",
+            stream = litellm.completion(
+                model=self.model,
                 messages=messages,
                 max_tokens=500,
-                temperature=0.7
+                temperature=0.7,
+                stream=True
             )
             
-            ai_response = response.choices[0].message.content
+            full_response = ""
+            for chunk in stream:
+                content = chunk.choices[0].delta.content or ""
+                if content:
+                    full_response += content
+                    yield content
             
             # Update conversation history
             self.conversation_history[session_id].append({
@@ -110,14 +137,15 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             })
             self.conversation_history[session_id].append({
                 "role": "assistant", 
-                "content": ai_response
+                "content": full_response
             })
             
-            return ai_response
-            
+        except litellm.exceptions.APIError as e:
+            self.notify(f"LiteLLM API Error: {e}", "error")
+            yield "I'm sorry, there was an error with the AI mentor service. Please try again later."
         except Exception as e:
-            print(f"Error generating AI response: {e}")
-            return "I'm sorry, I'm having trouble responding right now. Please try again later."
+            self.notify(f"Error generating AI response: {e}", "error")
+            yield "I'm sorry, I'm having trouble responding right now. Please try again later."
     
     def clear_conversation(self, session_id: str = "default"):
         """Clear conversation history for a session"""
@@ -126,6 +154,9 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
     
     def get_level_hint(self, level_num: int) -> str:
         """Get a general hint for a specific level without spoilers"""
+<<<<<<< HEAD
+        return self.level_hints.get(str(level_num),
+=======
         # Try to get from cache first
         cache_key = f"level_hint_{level_num}"
         cached_hint = cache.get(cache_key)
@@ -142,6 +173,7 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
         }
         
         hint = level_hints.get(level_num, 
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
             "Think about what the level description is asking you to find or do. Break down the problem into smaller steps.")
         
         # Cache the result for 1 hour
@@ -153,6 +185,10 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
 
     def explain_command(self, command: str) -> str:
         """Provide educational explanation of a command"""
+<<<<<<< HEAD
+        return self.command_explanations.get(command.lower(),
+            f"'{command}' is a Linux command. Try 'man {command}' to learn more about it.")
+=======
         # Try to get from cache first
         command_hash = hashlib.sha256(command.encode('utf-8')).hexdigest()
         cache_key = f"command_explanation_{command_hash}"
@@ -182,3 +218,4 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
 
 # Global instance
 ai_mentor = BanditAIMentor()
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
