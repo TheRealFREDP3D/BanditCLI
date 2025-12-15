@@ -1,10 +1,8 @@
 # src/main.py
-import os
-import sys
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, TabbedContent, TabPane, TextArea, Input, Button, Label, LoadingIndicator
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.validation import Function, ValidationResult
 
@@ -75,7 +73,7 @@ class BanditCLIApp(App):
             self.query_one("#ssh_disconnect", Button).disabled = not connected
             self.query_one("#command_input", Input).disabled = not connected
             self.query_one("#send_button", Button).disabled = not connected
-        except Exception as e:
+        except Exception:
             # Widgets might not be ready yet
             pass
 

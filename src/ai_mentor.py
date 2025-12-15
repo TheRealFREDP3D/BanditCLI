@@ -23,14 +23,13 @@ class BanditAIMentor:
         self.disabled = not LITELLM_AVAILABLE or not api_key
         
         if self.disabled:
-            reason = "LiteLLM not installed" if not LITELLM_AVAILABLE else "No OpenAI API key found"
+            reason = "LiteLLM not installed" if not LITELLM_AVAILABLE else "OpenAI API key not found"
             self.notify(f"AI mentor disabled: {reason}", "warning")
         
         # LiteLLM can handle different providers, so we don't need a specific client instance.
         # We can check for a general API key, but since we are defaulting to a local model,
         # we might not need one. For now, we'll assume that if a user wants to use a
         # different model, they will set the appropriate environment variables.
-        self.disabled = False
         self.conversation_history: Dict[str, List[Dict[str, str]]] = {}
         
         # System prompt for the AI mentor
