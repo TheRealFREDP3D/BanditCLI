@@ -75,6 +75,9 @@ class BanditCLIApp(App):
             self.query_one("#ssh_disconnect", Button).disabled = not connected
             self.query_one("#command_input", Input).disabled = not connected
             self.query_one("#send_button", Button).disabled = not connected
+        except Exception as e:
+            # Widgets might not be ready yet
+            pass
 
     def watch_loading(self, loading: bool):
         """Called when the loading reactive property changes."""

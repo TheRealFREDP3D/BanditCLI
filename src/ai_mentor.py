@@ -2,16 +2,13 @@
 import os
 import json
 import importlib.resources
-from typing import List, Dict, Optional, Callable, Generator
-from datetime import datetime
+from typing import List, Dict, Callable, Generator
 
 try:
     import litellm
     LITELLM_AVAILABLE = True
 except ImportError:
     LITELLM_AVAILABLE = False
-
-from textual.app import Notify
 class BanditAIMentor:
     def __init__(self, notify_callback: Callable[[str, str], None], model: str = None, data_file_path: str = "ai_mentor_data.json"):
         self.notify = notify_callback
@@ -91,7 +88,7 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
 
     def get_response(self, user_message: str, session_id: str = "default", 
                     current_level: int = 0, recent_commands: List[str] = None,
-                    stream: bool = True) -> Generator[str, None, None]:
+                    terminal_output: str = "", stream: bool = True) -> Generator[str, None, None]:
         """Get a response from the AI mentor.
         
         Args:
@@ -99,6 +96,7 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             session_id: Session identifier for conversation history
             current_level: Current bandit level
             recent_commands: Recent commands the user has tried
+            terminal_output: Recent terminal output for context
             stream: Whether to stream the response
         """
         """Generate AI mentor response"""
