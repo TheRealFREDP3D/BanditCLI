@@ -3,95 +3,123 @@ import os
 from typing import Dict, List, Optional, Callable
 import importlib.resources
 
-<<<<<<< HEAD
-from textual.app import Notify
-=======
-from cache import cache
-
->>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
 class BanditLevelInfo:
     def __init__(self, levels_file_path: str = "bandit_levels.json", notify_callback: Callable[[str, str], None] = None):
         self.levels_file_path = levels_file_path
-        self.notify = notify_callback
+        self.notify = notify_callback or self._default_notify
         self.levels_data = self._load_levels_data()
-    
+
+    def _default_notify(self, message: str, severity: str = "info"):
+        """Default notification handler"""
+        print(f"[{severity.upper()}] {message}")
+
     def _load_levels_data(self) -> Dict:
-        """Load level data from JSON file"""
+        """Load level data from JSON file with better error handling"""
         try:
+            # Try to load from the src package first
             with importlib.resources.open_text("src", self.levels_file_path) as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            if self.notify:
+                data = json.load(f)
+                self.notify(f"Loaded {len(data)} levels from {self.levels_file_path}", "info")
+                return data
+        except (FileNotFoundError, AttributeError):
+            # Fallback to relative path
+            try:
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                file_path = os.path.join(current_dir, self.levels_file_path)
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.notify(f"Loaded {len(data)} levels from fallback path", "info")
+                    return data
+            except (FileNotFoundError, json.JSONDecodeError) as e:
                 self.notify(f"Error loading level data: {e}", "error")
-            return {}
-    
+                return self._get_fallback_data()
+        except json.JSONDecodeError as e:
+            self.notify(f"Invalid JSON in level data file: {e}", "error")
+            return self._get_fallback_data()
+
+    def _get_fallback_data(self) -> Dict:
+        """Provide basic fallback data if file can't be loaded"""
+        return {
+            "0": {
+                "level": 0,
+                "title": "Level 0",
+                "goal": "Connect to bandit.labs.overthewire.org on port 2220 using SSH.\nUsername: bandit0, Password: bandit0",
+                "commands": ["ssh"],
+                "reading_material": [],
+                "url": "https://overthewire.org/wargames/bandit/bandit0.html"
+            }
+        }
+
     def get_level_info(self, level_num: int) -> Optional[Dict]:
         """Get information for a specific level"""
-        # Try to get from cache first
-        cache_key = f"level_info_{level_num}"
-        cached_info = cache.get(cache_key)
-        if cached_info is not None:
-            return cached_info
-        
-        # If not in cache, get from data and cache it
         level_key = str(level_num)
-        level_info = self.levels_data.get(level_key)
-        
-        # Cache the result for 1 hour
-        if level_info is not None:
-            cache.set(cache_key, level_info, ttl=3600)
-        
-        return level_info
-    
+        return self.levels_data.get(level_key)
+
     def get_all_levels(self) -> Dict:
         """Get information for all levels"""
         return self.levels_data
-    
+
+    def get_available_levels(self) -> List[int]:
+        """Get list of available level numbers"""
+        return sorted([int(k) for k in self.levels_data.keys() if k.isdigit()])
+
     def get_level_goal(self, level_num: int) -> str:
         """Get the goal for a specific level"""
-        if level_info := self.get_level_info(level_num):
+        level_info = self.get_level_info(level_num)
+        if level_info:
             return level_info.get("goal", "Level information not available")
         return "Level information not available"
-    
+
     def get_recommended_commands(self, level_num: int) -> List[str]:
         """Get recommended commands for a specific level"""
-        if level_info := self.get_level_info(level_num):
+        level_info = self.get_level_info(level_num)
+        if level_info:
             return level_info.get("commands", [])
         return []
-    
+
     def get_reading_materials(self, level_num: int) -> List[Dict[str, str]]:
         """Get reading materials for a specific level"""
-        if level_info := self.get_level_info(level_num):
+        level_info = self.get_level_info(level_num)
+        if level_info:
             return level_info.get("reading_material", [])
         return []
-    
+
     def format_level_info(self, level_num: int) -> str:
         """Format level information as a readable string"""
-        # Try to get from cache first
-        cache_key = f"formatted_level_info_{level_num}"
-        cached_info = cache.get(cache_key)
-        if cached_info is not None:
-            return cached_info
-        
         level_info = self.get_level_info(level_num)
         if not level_info:
-            return f"Level {level_num} information not available"
+            available_levels = self.get_available_levels()
+            return f"""# Level {level_num} - Not Available
+
+Level {level_num} information is not available.
+
+Available levels: {', '.join(map(str, available_levels))}
+
+If you're working on a level beyond our data, refer to:
+https://overthewire.org/wargames/bandit/"""
+
+        formatted_info = f"# Bandit Level {level_num}"
         
-        formatted_info = f"# Bandit Level {level_num}\n\n"
+        # Add title if available
+        title = level_info.get("title", "")
+        if title and title.strip():
+            formatted_info += f" - {title}"
         
+        formatted_info += "\n\n"
+
         # Add goal
         goal = level_info.get("goal", "")
         if goal:
             formatted_info += f"## Goal\n{goal}\n\n"
-        
+
         # Add recommended commands
         commands = level_info.get("commands", [])
         if commands:
             formatted_info += f"## Recommended Commands\n"
             for command in commands:
-                formatted_info += f"- {command}\n"
+                formatted_info += f"- `{command}`\n"
             formatted_info += "\n"
-        
+
         # Add reading materials
         materials = level_info.get("reading_material", [])
         if materials:
@@ -104,8 +132,34 @@ class BanditLevelInfo:
                 elif title:
                     formatted_info += f"- {title}\n"
             formatted_info += "\n"
-        
-        # Cache the result for 1 hour
-        cache.set(cache_key, formatted_info, ttl=3600)
-        
+
+        # Add level URL if available
+        url = level_info.get("url", "")
+        if url:
+            formatted_info += f"## Official Level Page\n[{url}]({url})\n\n"
+
         return formatted_info
+
+    def search_levels(self, query: str) -> List[int]:
+        """Search levels by goal or command content"""
+        query_lower = query.lower()
+        matching_levels = []
+        
+        for level_key, level_data in self.levels_data.items():
+            if not level_key.isdigit():
+                continue
+                
+            level_num = int(level_key)
+            
+            # Search in goal
+            goal = level_data.get("goal", "").lower()
+            if query_lower in goal:
+                matching_levels.append(level_num)
+                continue
+            
+            # Search in commands
+            commands = level_data.get("commands", [])
+            if any(query_lower in cmd.lower() for cmd in commands):
+                matching_levels.append(level_num)
+        
+        return sorted(matching_levels)

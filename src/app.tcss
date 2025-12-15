@@ -1,4 +1,4 @@
-/* App styling */
+/* App styling with improved visual hierarchy */
 Screen {
     background: $background;
 }
@@ -15,17 +15,21 @@ Header {
     height: 80%;
     border: solid $secondary;
     background: $surface;
+    scrollbar-background: $background;
+    scrollbar-color: $primary;
 }
 
-/* SSH input styling */
-#ssh_username, #ssh_password, #ssh_port {
+/* SSH input styling with better layout */
+#ssh_username, #ssh_password, #ssh_port, #ssh_timeout {
     width: 15%;
     margin: 1 0;
+    min-width: 12;
 }
 
 #ssh_connect, #ssh_disconnect {
     width: 10%;
     margin: 1 0;
+    min-width: 10;
 }
 
 /* Command input styling */
@@ -42,7 +46,7 @@ Header {
 #send_button {
     width: 15%;
     margin: 1 1 1 0;
-    min-width: 80px;
+    min-width: 8;
 }
 
 /* Level info styling */
@@ -50,6 +54,9 @@ Header {
     height: 80%;
     border: solid $secondary;
     background: $surface;
+    padding: 1;
+    scrollbar-background: $background;
+    scrollbar-color: $primary;
 }
 
 /* Mentor chat styling */
@@ -57,6 +64,9 @@ Header {
     height: 80%;
     border: solid $secondary;
     background: $surface;
+    padding: 1;
+    scrollbar-background: $background;
+    scrollbar-color: $primary;
 }
 
 /* Mentor input styling */
@@ -69,15 +79,27 @@ Header {
 #mentor_send {
     width: 20%;
     margin: 1 0;
+    min-width: 8;
 }
+
 /* Button styling */
 Button {
     margin: 1 0;
+    min-height: 3;
+}
+
+Button:hover {
+    background: $primary;
+}
+
+Button:disabled {
+    opacity: 0.5;
 }
 
 #ssh-controls {
     align: left bottom;
     margin: 1 0;
+    height: auto;
 }
 
 #ssh-controls > Vertical {
@@ -108,11 +130,52 @@ Button {
 #command-controls > Label {
     width: auto;
     margin: 0 1 0 1;
-    min-width: 80px;
+    min-width: 8;
 }
 
 /* Label styling */
 Label {
     margin: 1 0;
     width: 10%;
+    text-align: center;
+}
+
+/* Loading indicator styling */
+LoadingIndicator {
+    height: 1;
+    margin: 0 0 1 0;
+}
+
+/* Tab styling */
+TabbedContent > ContentTabs {
+    background: $surface;
+}
+
+TabbedContent > ContentTabs > Tab {
+    padding: 1 2;
+    margin: 0 1 0 0;
+}
+
+TabbedContent > ContentTabs > Tab:hover {
+    background: $primary;
+}
+
+/* Input validation styling */
+Input.-invalid {
+    border: solid red;
+}
+
+Input.-valid {
+    border: solid green;
+}
+
+/* Responsive design adjustments */
+@media (max-width: 100) {
+    #ssh_username, #ssh_password, #ssh_port, #ssh_timeout {
+        width: 20%;
+    }
+    
+    #command_input, #mentor_input {
+        width: 70%;
+    }
 }

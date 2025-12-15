@@ -205,20 +205,81 @@ class BanditCLIApp(App):
             timeout_str = timeout_input.value or "10"
             
             if not username or not password:
-{{ ... }}
+                self.notify("Please enter both username and password", severity="error")
+                return
+            
+            # Convert port and timeout to integer
+            try:
+                port_int = int(port)
+                timeout_int = int(timeout_str)
+            except ValueError:
+                self.notify("Port and timeout must be valid numbers", severity="error")
+                return
+
+            # Attempt to connect
+            success = self.ssh_manager.create_connection(
+                self.session_id,
+                "bandit.labs.overthewire.org",
+                port_int,
+                username,
+                password,
+                timeout=timeout_int
+            )
+
+            if success:
+                self.ssh_connected = True
+                self.notify("SSH connection established", severity="success")
+                # Set up the output callback
+                connection = self.ssh_manager.get_connection(self.session_id)
+                if connection:
+                    connection.set_output_callback(self.on_ssh_output)
+            else:
+                self.notify("Failed to establish SSH connection", severity="error")
+        except Exception as e:
+            self.notify(f"Error connecting to SSH: {e}", severity="error")
+        finally:
+            self.loading = False
+
+    def disconnect_ssh(self):
+        """Disconnect from the SSH server."""
+        self.ssh_manager.disconnect_session(self.session_id)
+        self.ssh_connected = False
+        self.notify("Disconnected from SSH server", severity="information")
+
+    def on_ssh_output(self, data: str):
+        """Handle SSH output with proper text handling."""
+        terminal_output = self.query_one("#terminal_output", TextArea)
+        current_text = terminal_output.text or ""
+        terminal_output.load_text(current_text + data)
+        terminal_output.scroll_end(animate=False)
+        
+        # Keep track of terminal output for AI context
+        self.terminal_output = (self.terminal_output + data)[-10000:]  # Keep last 10k chars
+
+    def send_command(self):
+        """Send a command to the SSH server."""
+        command_input = self.query_one("#command_input", Input)
+        command = command_input.value.strip()
+        
+        if not command:
+            return
+        
+        # Add command to recent commands
+        self.recent_commands.append(command)
         if len(self.recent_commands) > 20:
             self.recent_commands.pop(0)
         
         # Send command to SSH server
         connection = self.ssh_manager.get_connection(self.session_id)
-        if connection is not None:
-            connection.resize_pty(width=event.size.width, height=event.size.height - 10)      
+        if connection:
+            connection.send_command(command + "\n")
+        
         # Clear the input
         command_input.value = ""
 
     def send_mentor_message(self):
         """Send a message to the AI mentor."""
-{{ ... }}
+        if self.ai_generating:
             return
         
         mentor_input = self.query_one("#mentor_input", Input)
@@ -273,10 +334,8 @@ class BanditCLIApp(App):
             self.current_level += 1
             self.update_level_info()
             self.notify(f"Switched to Level {self.current_level}", severity="information")
-        else:
-            self.notify("Already at the highest available level", severity="warning")
 
-    def action_toggle_dark(self):
+    def action_toggle_dark(self) -> None:
         """Toggle dark mode."""
         self.dark = not self.dark
 
@@ -289,26 +348,14 @@ class BanditCLIApp(App):
         Returns:
             None: Always returns None
         """
-        try:
-            tabbed = self.query_one(TabbedContent)
-            if not tabbed:
-                self.notify("Tabbed content not found", severity="error")
-                return None
-                
-            # Get all valid tab IDs from panes that have an ID
-            valid_tab_ids = {p.id for p in tabbed.panes if p.id}
-            
-            if not tab_id:
-                self.notify("No tab ID provided", severity="warning")
-                return None
-                
-            if tab_id not in valid_tab_ids:
-                self.notify(f"Unknown tab: {tab_id}", severity="warning")
-                return None
-                
-            tabbed.active = tab_id
-            return None
-            
-        except Exception as e:
-            self.notify(f"Failed to switch tab: {e}", severity="error")
-            return None
+        tabs = self.query_one(TabbedContent)
+        tabs.active = tab_id
+
+    def on_resize(self, event):
+        """Handle terminal resize events."""
+        if connection := self.ssh_manager.get_connection(self.session_id):
+            connection.resize_pty(width=event.size.width, height=event.size.height - 10)
+
+if __name__ == "__main__":
+    app = BanditCLIApp()
+    app.run()
