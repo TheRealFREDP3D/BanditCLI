@@ -11,6 +11,7 @@ try:
 except ImportError:
     LITELLM_AVAILABLE = False
 
+from textual.app import Notify
 class BanditAIMentor:
     def __init__(self, notify_callback: Callable[[str, str], None], model: str = None, data_file_path: str = "ai_mentor_data.json"):
         self.notify = notify_callback
@@ -28,6 +29,11 @@ class BanditAIMentor:
             reason = "LiteLLM not installed" if not LITELLM_AVAILABLE else "No OpenAI API key found"
             self.notify(f"AI mentor disabled: {reason}", "warning")
         
+        # LiteLLM can handle different providers, so we don't need a specific client instance.
+        # We can check for a general API key, but since we are defaulting to a local model,
+        # we might not need one. For now, we'll assume that if a user wants to use a
+        # different model, they will set the appropriate environment variables.
+        self.disabled = False
         self.conversation_history: Dict[str, List[Dict[str, str]]] = {}
         
         # System prompt for the AI mentor
@@ -74,31 +80,32 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
         """Trim the conversation history to the specified maximum length.
         
         Args:
-            session_id: The session ID to trim history for
-            max_history: Maximum number of message pairs to keep (1 pair = 1 user + 1 assistant)
+            session_id: The session identifier
+            max_history: Maximum number of messages to keep in history
         """
         if session_id in self.conversation_history:
-            # Keep only the most recent max_history message pairs
-            self.conversation_history[session_id] = self.conversation_history[session_id][-2*max_history:]
+            history = self.conversation_history[session_id]
+            if len(history) > max_history:
+                # Keep the system prompt and the most recent messages
+                self.conversation_history[session_id] = history[-max_history:]
 
-    def get_response(self, user_message: str, session_id: str = "default",
-                     current_level: int = 0, recent_commands: List[str] = None,
-                    terminal_output: str = "") -> Generator[str, None, None]:
-        """Generate AI mentor response
+    def get_response(self, user_message: str, session_id: str = "default", 
+                    current_level: int = 0, recent_commands: List[str] = None,
+                    stream: bool = True) -> Generator[str, None, None]:
+        """Get a response from the AI mentor.
         
         Args:
-            user_message: The user's message to the AI mentor
-            session_id: Unique identifier for the conversation session
-            current_level: Current Bandit level the user is on
-            recent_commands: List of recently executed commands
-            terminal_output: Recent terminal output for context
-            
-        Yields:
-            str: Chunks of the AI's response as they're generated
+            user_message: The user's message
+            session_id: Session identifier for conversation history
+            current_level: Current bandit level
+            recent_commands: Recent commands the user has tried
+            stream: Whether to stream the response
         """
+        """Generate AI mentor response"""
         # If AI is disabled, return a default message
         if self.disabled:
-            yield "AI mentor is currently unavailable. Please ensure LiteLLM is installed and set your OpenAI API key in the .env file."
+            yield "AI mentor is currently disabled. Please set your OpenAI API key in the .env file to enable this feature."
+>>>>>>> origin/dependabot/pip/pip-98b9a90c0d
             return
         
         try:
@@ -171,7 +178,6 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
         except Exception as e:
             self.notify(f"Error generating AI response: {e}", "error")
             yield "I'm sorry, I'm having trouble responding right now. Please try again later."
-
     def clear_conversation(self, session_id: str = "default"):
         """Clear conversation history for a session"""
         if session_id in self.conversation_history:

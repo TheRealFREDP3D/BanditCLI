@@ -2,7 +2,7 @@ import json
 import os
 from typing import Dict, List, Optional, Callable
 import importlib.resources
-
+from textual.app import Notify
 class BanditLevelInfo:
     def __init__(self, levels_file_path: str = "bandit_levels.json", notify_callback: Callable[[str, str], None] = None):
         self.levels_file_path = levels_file_path
@@ -49,7 +49,6 @@ class BanditLevelInfo:
                 "url": "https://overthewire.org/wargames/bandit/bandit0.html"
             }
         }
-
     def get_level_info(self, level_num: int) -> Optional[Dict]:
         """Get information for a specific level"""
         level_key = str(level_num)

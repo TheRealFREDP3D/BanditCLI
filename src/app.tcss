@@ -46,7 +46,7 @@ Header {
 #send_button {
     width: 15%;
     margin: 1 1 1 0;
-    min-width: 8;
+min-width: 80px;
 }
 
 /* Level info styling */
@@ -81,7 +81,6 @@ Header {
     margin: 1 0;
     min-width: 8;
 }
-
 /* Button styling */
 Button {
     margin: 1 0;
@@ -131,6 +130,42 @@ Button:disabled {
     width: auto;
     margin: 0 1 0 1;
     min-width: 8;
+}
+
+#ssh-controls {
+    align: left bottom;
+    margin: 1 0;
+}
+
+#ssh-controls > Vertical {
+    width: 1fr;
+    margin: 0 1;
+}
+
+#ssh-buttons {
+    padding-top: 1;
+}
+
+#command-controls {
+    align: center middle;
+    dock: bottom;
+    width: 100%;
+    height: auto;
+    margin: 1 0 0 0;
+    padding: 1 0;
+    background: $background;
+    border-top: solid $secondary;
+}
+
+#command-controls > Input {
+    width: 80%;
+    margin: 0 1 0 0;
+}
+
+#command-controls > Label {
+    width: auto;
+    margin: 0 1 0 1;
+    min-width: 80px;
 }
 
 /* Label styling */

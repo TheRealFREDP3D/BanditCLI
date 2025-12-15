@@ -75,8 +75,6 @@ class BanditCLIApp(App):
             self.query_one("#ssh_disconnect", Button).disabled = not connected
             self.query_one("#command_input", Input).disabled = not connected
             self.query_one("#send_button", Button).disabled = not connected
-        except:
-            pass  # Widgets might not be ready yet
 
     def watch_loading(self, loading: bool):
         """Called when the loading reactive property changes."""
@@ -155,12 +153,10 @@ class BanditCLIApp(App):
         
         # Initialize the level info
         self.update_level_info()
-        
         # Initial state of buttons
         self.query_one("#ssh_disconnect", Button).disabled = True
         self.query_one("#command_input", Input).disabled = True
         self.query_one("#send_button", Button).disabled = True
-
     def update_level_info(self):
         """Update the level information display."""
         level_info_text = self.level_info.format_level_info(self.current_level)
@@ -202,17 +198,94 @@ class BanditCLIApp(App):
             username = username_input.value or ""
             password = password_input.value or ""
             port = port_input.value or "2220"
-            timeout_str = timeout_input.value or "10"
+            timeout_str = timeout_input.value
             
             if not username or not password:
-{{ ... }}
+                self.notify("Please enter both username and password", severity="error")
+                self.loading = False
+                return
+            
+            # Convert port and timeout to integer
+            try:
+                port_int = int(port)
+                timeout_int = int(timeout_str)
+            except ValueError:
+                self.notify("Port and timeout must be valid numbers", severity="error")
+                self.loading = False
+                return
+                
+            # Validate port range
+            if port_int < 1 or port_int > 65535:
+                self.notify("Port must be between 1 and 65535", severity="error")
+                return
+            
+            # Attempt to connect
+            success = self.ssh_manager.create_connection(
+                self.session_id,
+                "bandit.labs.overthewire.org",
+                port_int,
+                username,
+                password,
+                timeout=timeout_int
+            )
+            
+            if success:
+                self.ssh_connected = True
+                self.notify("SSH connection established", severity="success")
+                # Set up the output callback
+                connection = self.ssh_manager.get_connection(self.session_id)
+                if connection:
+                    connection.set_output_callback(self.on_ssh_output)
+            else:
+                self.notify("Failed to establish SSH connection. Please check your credentials, network connection, and ensure the Bandit server is accessible.", severity="error")
+            self.loading = False
+            
+        except Exception as e:
+            self.notify(f"Error during SSH connection: {e}", severity="error")
+            self.loading = False
+    
+    def disconnect_ssh(self):
+        """Disconnect from the SSH server."""
+        self.ssh_manager.disconnect_session(self.session_id)
+        self.ssh_connected = False
+        self.notify("SSH connection closed", severity="information")
+    
+    def on_ssh_output(self, data: str):
+        """Handle SSH output."""
+        self.terminal_output += data
+        terminal_output = self.query_one("#terminal_output", TextArea)
+        terminal_output.load_text(self.terminal_output)
+        # Scroll to the end
+        terminal_output.scroll_end(animate=False)
+    
+    def send_command(self):
+        """Send a command to the SSH server."""
+        # Check if we're in offline mode
+        if self.offline_mode:
+            self.notify("Cannot send commands in offline mode", severity="error")
+            return
+        
+        if not self.ssh_connected:
+            self.notify("Not connected to SSH server", severity="error")
+            return
+        
+        command_input = self.query_one("#command_input", Input)
+        command = command_input.value
+        
+        if not command:
+            return
+>>>>>>> origin/dependabot/pip/pip-98b9a90c0d
+        
+        # Add command to recent commands
+        self.recent_commands.append(command)
         if len(self.recent_commands) > 20:
             self.recent_commands.pop(0)
         
         # Send command to SSH server
         connection = self.ssh_manager.get_connection(self.session_id)
-        if connection is not None:
-            connection.resize_pty(width=event.size.width, height=event.size.height - 10)      
+        if connection:
+            connection.send_command(command + "\n")
+        
         # Clear the input
         command_input.value = ""
 
@@ -230,6 +303,22 @@ class BanditCLIApp(App):
         self.ai_generating = True
         self.loading = True
         
+<<<<<<< HEAD
+        self.loading = True
+
+        mentor_chat = self.query_one("#mentor_chat", TextArea)
+        current_text = mentor_chat.text or ""
+        mentor_chat.load_text(f"{current_text}\nYou: {message}\nMentor: ")
+
+        # Get AI response
+        response_stream = self.ai_mentor.get_response(
+            message,
+            self.session_id,
+            self.current_level,
+            self.recent_commands,
+            self.terminal_output
+        )
+=======
         try:
             mentor_chat = self.query_one("#mentor_chat", TextArea)
             current_text = mentor_chat.text or ""
@@ -249,6 +338,7 @@ class BanditCLIApp(App):
                 mentor_chat.load_text(mentor_chat.text + chunk)
                 mentor_chat.scroll_end(animate=False)
             
+<<<<<<< HEAD
             mentor_chat.load_text(mentor_chat.text + "\n")
             
         except Exception as e:
@@ -259,6 +349,26 @@ class BanditCLIApp(App):
             self.loading = False
             self.ai_generating = False
 
+=======
+        # Validate message length
+        if len(message) > 1000:
+            self.notify("Message is too long (maximum 1000 characters)", severity="error")
+            return
+        
+        # Provide a default offline response
+        response = "AI mentor is not available in offline mode. Please connect to the internet and disable offline mode to use the AI mentor."
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
+        
+        # Update chat display
+        for chunk in response_stream:
+            mentor_chat.load_text(mentor_chat.text + chunk)
+            mentor_chat.scroll_end(animate=False)
+        
+        # Clear the input
+        mentor_input.value = ""
+        self.loading = False
+    
+>>>>>>> origin/dependabot/pip/pip-98b9a90c0d
     def previous_level(self):
         """Go to the previous level."""
         if self.current_level > 0:
@@ -280,6 +390,7 @@ class BanditCLIApp(App):
         """Toggle dark mode."""
         self.dark = not self.dark
 
+<<<<<<< HEAD
     def action_switch_tab(self, tab_id: str) -> None:
         """Switch to the specified tab.
         
@@ -312,3 +423,13 @@ class BanditCLIApp(App):
         except Exception as e:
             self.notify(f"Failed to switch tab: {e}", severity="error")
             return None
+=======
+    def on_resize(self, event):
+        """Handle terminal resize events."""
+        if connection := self.ssh_manager.get_connection(self.session_id):
+            connection.resize_pty(width=event.size.width, height=event.size.height - 10)
+
+if __name__ == "__main__":
+    app = BanditCLIApp()
+    app.run()
+>>>>>>> origin/dependabot/pip/pip-98b9a90c0d

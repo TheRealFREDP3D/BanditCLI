@@ -1,15 +1,9 @@
-# textual==0.80.0
-# paramiko==4.0.0
-# openai==1.99.9
-# litellm==1.15.0
-# beautifulsoup4==4.13.4
-# requests==2.32.4
-# python-dotenv==1.0.1
-# pytest==8.2.0
-# pytest-cov==5.0.0
-
-# requirements.txt
-textual>=0.48.0
-paramiko>=3.3.1
-python-dotenv>=1.0.0
-litellm>=1.44.0
+textual==0.80.0
+paramiko==4.0.0
+openai==1.99.9
+litellm==1.61.15
+beautifulsoup4==4.13.4
+requests==2.32.4
+python-dotenv==1.0.1
+pytest==8.2.0
+pytest-cov==5.0.0

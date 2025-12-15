@@ -5,13 +5,13 @@ import time
 import socket
 import logging
 from typing import Optional, Callable, Dict
+from enum import Enum
 
 # Configure logging
 logging.getLogger("paramiko").setLevel(logging.WARNING)
 
 class SSHConnection:
-    def __init__(self, hostname: str, port: int, username: str, password: str, 
-                 notify_callback: Callable[[str, str], None], timeout: int = 10):
+    def __init__(self, hostname: str, port: int, username: str, password: str, notify_callback: Callable[[str, str], None], timeout: int = 10):
         self.hostname = hostname
         self.port = port
         self.username = username
@@ -26,6 +26,46 @@ class SSHConnection:
         self.timeout = timeout
         self.keepalive_interval = 30  # Send keepalive every 30 seconds
         self._lock = threading.Lock()
+    def connect(self) -> bool:
+        """Establish SSH connection"""
+        try:
+            self.client = paramiko.SSHClient()
+            self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            
+            self.client.connect(
+                hostname=self.hostname,
+                port=self.port,
+                username=self.username,
+                password=self.password,
+                timeout=self.timeout
+            )
+            
+            # Create interactive shell
+            self.channel = self.client.invoke_shell(term='xterm-color', width=80, height=24)
+            self.channel.settimeout(0.1)
+            self.connected = True
+            
+            # Start reading output in background
+            self.start_reading()
+            
+            return True
+            
+        except (paramiko.AuthenticationException, paramiko.SSHException, TimeoutError) as e:
+            self.notify(f"SSH connection failed: {e}", "error")
+            return False
+=======
+    def _create_ssh_client(self) -> None:
+        """Create and configure SSH client with connection parameters."""
+        self.client = paramiko.SSHClient()
+        self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.client.connect(
+            hostname=self.hostname,
+            port=self.port,
+            username=self.username,
+            password=self.password,
+            timeout=10
+        )
+>>>>>>> origin/dependabot/pip/pip-98b9a90c0d
 
     def connect(self) -> bool:
         """Establish SSH connection with enhanced security and error handling"""
@@ -95,6 +135,37 @@ class SSHConnection:
             self.notify(f"Unexpected connection error: {e}", "error")
             return False
 
+=======
+                self._create_ssh_client()
+                self._create_shell_channel()
+                return True
+                
+            except paramiko.AuthenticationException:
+                print(f"SSH connection failed: Authentication failed for user {self.username}")
+                return False  # Don't retry on authentication failures
+            except paramiko.SSHException as e:
+                if "timed out" in str(e).lower():
+                    print(f"SSH connection failed: Connection timeout when connecting to {self.hostname}:{self.port}")
+                else:
+                    print(f"SSH connection failed: SSH error - {e}")
+                if attempt < retries - 1:
+                    print(f"Retrying connection... ({attempt + 1}/{retries - 1})")
+                    time.sleep(1)
+            except TimeoutError:
+                print(f"SSH connection failed: Connection timeout when connecting to {self.hostname}:{self.port}")
+                if attempt < retries - 1:
+                    print(f"Retrying connection... ({attempt + 1}/{retries - 1})")
+                    time.sleep(1)
+            except Exception as e:
+                print(f"SSH connection failed: {e}")
+                if attempt < retries - 1:
+                    print(f"Retrying connection... ({attempt + 1}/{retries - 1})")
+                    time.sleep(1)
+        
+        return False
+>>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
+    
+>>>>>>> origin/dependabot/pip/pip-98b9a90c0d
     def start_reading(self):
         """Start background thread to read SSH output"""
         with self._lock:
@@ -107,17 +178,10 @@ class SSHConnection:
         while not self.stop_reading and self.connected:
             try:
                 if self.channel:
-                    # Check if there's data available to read
-                    if self.channel.recv_ready():
-                        data = self.channel.recv(1024).decode('utf-8', errors='ignore')
-                        if data and self.output_callback:
-                            self.output_callback(data)
-                    # Small delay to prevent high CPU usage
-                    time.sleep(0.01)
-                else:
-                    # If channel is not available, wait a bit longer before checking again
-                    time.sleep(0.1)
-            except Exception as e:
+                    data = self.channel.recv(1024).decode('utf-8', errors='ignore')
+                    if data and self.output_callback:
+                        self.output_callback(data)
+            except (socket.timeout, Exception) as e:
                 if not self.stop_reading:
                     self.notify(f"Error reading SSH output: {e}", "error")
                 break
@@ -135,27 +199,6 @@ class SSHConnection:
             self.notify(f"Error sending command: {e}", "error")
             with self._lock:
                 self.connected = False
-
-    def set_output_callback(self, callback: Callable[[str], None]):
-        """Set callback function for SSH output"""
-        self.output_callback = callback
-
-    def resize_pty(self, width: int, height: int):
-        """Resize the PTY with validation"""
-        if not (10 <= width <= 200 and 5 <= height <= 100):
-            return  # Ignore invalid resize requests
-        
-        with self._lock:
-            if self.channel and self.connected:
-                try:
-                    self.channel.resize_pty(width=width, height=height)
-                except Exception as e:
-                    self.notify(f"Error resizing PTY: {e}", "warning")
-
-    def is_connected(self) -> bool:
-        """Check if connection is active"""
-        with self._lock:
-            return self.connected
 
     def disconnect(self):
         """Close SSH connection safely"""
@@ -178,6 +221,10 @@ class SSHConnection:
                 self.notify("Forced thread termination is not supported; resources have been cleaned up.", "warning")
         
         # Close channel and client
+        if self.read_thread:
+            self.read_thread.join(timeout=2)
+            if self.read_thread.is_alive():
+                self.notify("Warning: SSH reading thread did not exit gracefully.", "warning")
         if self.channel:
             try:
                 self.channel.close()
@@ -213,7 +260,6 @@ class SSHManager:
                 self.connections[session_id] = connection
                 return True
             return False
-
     def get_connection(self, session_id: str) -> Optional[SSHConnection]:
         """Get SSH connection by session ID"""
         with self._lock:
