@@ -105,7 +105,6 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
         # If AI is disabled, return a default message
         if self.disabled:
             yield "AI mentor is currently disabled. Please set your OpenAI API key in the .env file to enable this feature."
->>>>>>> origin/dependabot/pip/pip-98b9a90c0d
             return
         
         try:

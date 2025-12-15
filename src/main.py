@@ -274,8 +274,6 @@ class BanditCLIApp(App):
         
         if not command:
             return
->>>>>>> origin/dependabot/pip/pip-98b9a90c0d
-        
         # Add command to recent commands
         self.recent_commands.append(command)
         if len(self.recent_commands) > 20:
@@ -291,7 +289,9 @@ class BanditCLIApp(App):
 
     def send_mentor_message(self):
         """Send a message to the AI mentor."""
-{{ ... }}
+        # Check if we're in offline mode
+        if self.offline_mode:
+            self.notify("Cannot send messages to AI mentor in offline mode", severity="error")
             return
         
         mentor_input = self.query_one("#mentor_input", Input)
@@ -303,22 +303,6 @@ class BanditCLIApp(App):
         self.ai_generating = True
         self.loading = True
         
-<<<<<<< HEAD
-        self.loading = True
-
-        mentor_chat = self.query_one("#mentor_chat", TextArea)
-        current_text = mentor_chat.text or ""
-        mentor_chat.load_text(f"{current_text}\nYou: {message}\nMentor: ")
-
-        # Get AI response
-        response_stream = self.ai_mentor.get_response(
-            message,
-            self.session_id,
-            self.current_level,
-            self.recent_commands,
-            self.terminal_output
-        )
-=======
         try:
             mentor_chat = self.query_one("#mentor_chat", TextArea)
             current_text = mentor_chat.text or ""
@@ -333,42 +317,21 @@ class BanditCLIApp(App):
                 self.terminal_output[-1000:]  # Last 1000 chars of output
             )
             
-            # Stream the response
+            # Stream response
             for chunk in response_stream:
                 mentor_chat.load_text(mentor_chat.text + chunk)
                 mentor_chat.scroll_end(animate=False)
             
-<<<<<<< HEAD
             mentor_chat.load_text(mentor_chat.text + "\n")
             
         except Exception as e:
             self.notify(f"Error getting AI response: {e}", severity="error")
         finally:
-            # Clear the input
+            # Clear input
             mentor_input.value = ""
             self.loading = False
             self.ai_generating = False
 
-=======
-        # Validate message length
-        if len(message) > 1000:
-            self.notify("Message is too long (maximum 1000 characters)", severity="error")
-            return
-        
-        # Provide a default offline response
-        response = "AI mentor is not available in offline mode. Please connect to the internet and disable offline mode to use the AI mentor."
->>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
-        
-        # Update chat display
-        for chunk in response_stream:
-            mentor_chat.load_text(mentor_chat.text + chunk)
-            mentor_chat.scroll_end(animate=False)
-        
-        # Clear the input
-        mentor_input.value = ""
-        self.loading = False
-    
->>>>>>> origin/dependabot/pip/pip-98b9a90c0d
     def previous_level(self):
         """Go to the previous level."""
         if self.current_level > 0:
@@ -390,7 +353,6 @@ class BanditCLIApp(App):
         """Toggle dark mode."""
         self.dark = not self.dark
 
-<<<<<<< HEAD
     def action_switch_tab(self, tab_id: str) -> None:
         """Switch to the specified tab.
         
@@ -423,7 +385,7 @@ class BanditCLIApp(App):
         except Exception as e:
             self.notify(f"Failed to switch tab: {e}", severity="error")
             return None
-=======
+
     def on_resize(self, event):
         """Handle terminal resize events."""
         if connection := self.ssh_manager.get_connection(self.session_id):
@@ -432,4 +394,3 @@ class BanditCLIApp(App):
 if __name__ == "__main__":
     app = BanditCLIApp()
     app.run()
->>>>>>> origin/dependabot/pip/pip-98b9a90c0d

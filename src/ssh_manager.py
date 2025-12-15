@@ -53,7 +53,6 @@ class SSHConnection:
         except (paramiko.AuthenticationException, paramiko.SSHException, TimeoutError) as e:
             self.notify(f"SSH connection failed: {e}", "error")
             return False
-=======
     def _create_ssh_client(self) -> None:
         """Create and configure SSH client with connection parameters."""
         self.client = paramiko.SSHClient()
@@ -65,7 +64,6 @@ class SSHConnection:
             password=self.password,
             timeout=10
         )
->>>>>>> origin/dependabot/pip/pip-98b9a90c0d
 
     def connect(self) -> bool:
         """Establish SSH connection with enhanced security and error handling"""
@@ -135,7 +133,6 @@ class SSHConnection:
             self.notify(f"Unexpected connection error: {e}", "error")
             return False
 
-=======
                 self._create_ssh_client()
                 self._create_shell_channel()
                 return True
@@ -163,9 +160,7 @@ class SSHConnection:
                     time.sleep(1)
         
         return False
->>>>>>> a35b915fdb63a5b562c0be2ef5e5556614b1801c
     
->>>>>>> origin/dependabot/pip/pip-98b9a90c0d
     def start_reading(self):
         """Start background thread to read SSH output"""
         with self._lock:
