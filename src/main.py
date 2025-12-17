@@ -16,6 +16,7 @@ from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.validation import Function, ValidationResult
 from textual.widget import Widget
+import re
 from typing import Optional, List, Callable, Any
 
 from .ssh_manager import SSHManager
@@ -74,6 +75,68 @@ def validate_timeout(value: str) -> ValidationResult:
             return ValidationResult.failure("Timeout must be between 1 and 300 seconds")
     except ValueError:
         return ValidationResult.failure("Timeout must be a number")
+
+def validate_username(value: str) -> ValidationResult:
+    """Validate SSH username for security.
+    
+    Args:
+        value: The username string to validate.
+        
+    Returns:
+        ValidationResult: Success if valid, failure with message if invalid.
+    """
+    if not value:
+        return ValidationResult.failure("Username is required")
+    
+    # Check for dangerous characters that could lead to injection
+    dangerous_chars = [';', '&', '|', '`', '$', '(', ')', '<', '>', '"', "'", '\\']
+    if any(char in value for char in dangerous_chars):
+        return ValidationResult.failure("Username contains invalid characters")
+    
+    # Length check
+    if len(value) > 32:
+        return ValidationResult.failure("Username too long (max 32 characters)")
+    
+    # Pattern check (allow alphanumeric, underscores, hyphens)
+    if not re.match(r'^[a-zA-Z0-9_-]+$', value):
+        return ValidationResult.failure("Username can only contain letters, numbers, underscores, and hyphens")
+    
+    return ValidationResult.success()
+
+def validate_command(value: str) -> ValidationResult:
+    """Validate SSH command for injection prevention.
+    
+    Args:
+        value: The command string to validate.
+        
+    Returns:
+        ValidationResult: Success if valid, failure with message if invalid.
+    """
+    if not value:
+        return ValidationResult.failure("Command cannot be empty")
+    
+    # Check for obvious command injection attempts
+    dangerous_patterns = [
+        r'\s*;\s*',  # Command separator
+        r'\s*&&\s*', # Command chaining
+        r'\s*\|\s*', # Pipe
+        r'\s*`.*`',  # Command substitution
+        r'\s*\$\(', # Command substitution
+        r'\s*>\s*',  # Output redirection
+        r'\s*<\s*',  # Input redirection
+        r'\s*>>\s*', # Output append
+        r'\\x[0-9a-fA-F]{2}', # Hex escape sequences
+    ]
+    
+    for pattern in dangerous_patterns:
+        if re.search(pattern, value, re.IGNORECASE):
+            return ValidationResult.failure("Command contains potentially dangerous operators")
+    
+    # Length check to prevent buffer overflow attempts
+    if len(value) > 1000:
+        return ValidationResult.failure("Command too long (max 1000 characters)")
+    
+    return ValidationResult.success()
 
 class BanditCLIApp(App):
     """A Textual app for the Bandit Wargame CLI.
@@ -200,7 +263,11 @@ class BanditCLIApp(App):
             with Horizontal(id="ssh-controls"):
                 with Vertical():
                     yield Label("Username:")
-                    yield Input(placeholder="bandit0", id="ssh_username")
+                    yield Input(
+                        placeholder="bandit0", 
+                        id="ssh_username",
+                        validators=[Function(validate_username, "Invalid username")]
+                    )
                 with Vertical():
                     yield Label("Password:")
                     yield Input(placeholder="bandit0", id="ssh_password", password=True)
@@ -223,7 +290,11 @@ class BanditCLIApp(App):
                     yield Button("Disconnect", variant="error", id="ssh_disconnect")
             with Horizontal(id="command-controls"):
                 yield Label("Command:")
-                yield Input(placeholder="Enter command...", id="command_input")
+                yield Input(
+                    placeholder="Enter command...", 
+                    id="command_input",
+                    validators=[Function(validate_command, "Invalid command")]
+                )
                 yield Button("Send", variant="primary", id="send_button")
 
     def compose_level_view(self) -> ComposeResult:
@@ -342,13 +413,27 @@ class BanditCLIApp(App):
             port_input = self.query_one("#ssh_port", Input)
             timeout_input = self.query_one("#ssh_timeout", Input)
             
+            # Validate inputs
             username = username_input.value or ""
             password = password_input.value or ""
             port = port_input.value or "2220"
             timeout_str = timeout_input.value
             
-            if not username or not password:
-                self._handle_error_and_stop_loading("Please enter both username and password")
+            # Check if inputs are valid
+            if not username_input.validate(username):
+                self._handle_error_and_stop_loading("Invalid username")
+                return
+            
+            if not password:
+                self._handle_error_and_stop_loading("Password is required")
+                return
+            
+            if not port_input.validate(port):
+                self._handle_error_and_stop_loading("Invalid port")
+                return
+            
+            if not timeout_input.validate(timeout_str):
+                self._handle_error_and_stop_loading("Invalid timeout")
                 return
             
             # Convert port and timeout to integer
@@ -364,14 +449,18 @@ class BanditCLIApp(App):
                 self._handle_error_and_stop_loading("Port must be between 1 and 65535")
                 return
             
-            # Attempt to connect
+            # Attempt to connect with security settings
+            # Default to secure host key verification for educational tool
+            verify_host_key = not os.getenv("BANDIT_CLI_INSECURE", "").lower() in ("true", "1", "yes")
+            
             success = self.ssh_manager.create_connection(
                 self.session_id,
                 "bandit.labs.overthewire.org",
                 port_int,
                 username,
                 password,
-                timeout=timeout_int
+                timeout=timeout_int,
+                verify_host_key=verify_host_key
             )
             
             if success:
@@ -433,6 +522,11 @@ class BanditCLIApp(App):
         command = command_input.value
         
         if not command:
+            return
+        
+        # Validate command for security
+        if not command_input.validate(command):
+            self.notify("Invalid command detected", severity="error")
             return
         # Add command to recent commands
         self.recent_commands.append(command)

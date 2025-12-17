@@ -15,3 +15,6 @@ mypy>=1.7.0
 pytest>=8.2.0
 pytest-cov>=5.0.0
 pytest-asyncio>=0.23.0
+
+# Security auditing
+pip-audit>=2.0.0

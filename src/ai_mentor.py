@@ -40,27 +40,35 @@ class BanditAIMentor:
         system_prompt (str): System prompt defining AI mentor behavior and constraints.
     """
     def __init__(self, notify_callback: Callable[[str, str], None], 
-                 model: Optional[str] = None, data_file_path: str = "ai_mentor_data.json") -> None:
+                 model: Optional[str] = None, data_file_path: str = "ai_mentor_data.json",
+                 opt_out: bool = False) -> None:
         """Initialize AI mentor with notification callback and configuration.
         
         Args:
             notify_callback: Callback for status/error notifications.
             model: The AI model to use (defaults to OPENAI_MODEL env var or gpt-3.5-turbo).
             data_file_path: Path to JSON file containing level hints and command explanations.
+            opt_out: Whether to opt out of AI features (privacy protection).
         """
         self.notify = notify_callback
         self.model: str = model or os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
         self.data_file_path: str = data_file_path
         self.level_hints: Dict[str, str] = {}
         self.command_explanations: Dict[str, str] = {}
+        self.opt_out = opt_out
         self._load_data()
         
-        # Check if AI is available
+        # Check if AI is available and not opted out
         api_key = os.getenv("OPENAI_API_KEY")
-        self.disabled = not LITELLM_AVAILABLE or not api_key
+        self.disabled = any([self.opt_out, not LITELLM_AVAILABLE, not api_key])
         
         if self.disabled:
-            reason = "LiteLLM not installed" if not LITELLM_AVAILABLE else "OpenAI API key not found"
+            if self.opt_out:
+                reason = "AI mentor disabled by user opt-out for privacy"
+            elif not LITELLM_AVAILABLE:
+                reason = "LiteLLM not installed"
+            else:
+                reason = "OpenAI API key not found"
             self.notify(f"AI mentor disabled: {reason}", "warning")
         
         # LiteLLM can handle different providers, so we don't need a specific client instance.
@@ -136,6 +144,12 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
         recent commands, and terminal output. Uses streaming for real-time response
         delivery and maintains conversation history for context.
         
+        **Data Privacy Notice**: The following data may be sent to OpenAI API:
+        - User messages and conversation history
+        - Current Bandit level number
+        - Last 5 commands entered by the user (if recent_commands provided)
+        - Last 500 characters of terminal output (if terminal_output provided)
+        
         Args:
             user_message: The user's question or message.
             session_id: Session identifier for conversation history tracking.
@@ -154,7 +168,10 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
         """Generate AI mentor response"""
         # If AI is disabled, return a default message
         if self.disabled:
-            yield "AI mentor is currently disabled. Please set your OpenAI API key in the .env file to enable this feature."
+            if self.opt_out:
+                yield "AI mentor is disabled due to privacy opt-out. You can enable it in settings if you want AI assistance."
+            else:
+                yield "AI mentor is currently disabled. Please set your OpenAI API key in the .env file to enable this feature."
             return
         
         try:

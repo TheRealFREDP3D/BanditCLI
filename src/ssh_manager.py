@@ -14,6 +14,8 @@ import threading
 import time
 import socket
 import logging
+import hashlib
+import os
 from typing import Optional, Callable, Dict
 from enum import Enum
 
@@ -45,7 +47,8 @@ class SSHConnection:
         _lock (threading.Lock): Thread safety lock.
     """
     def __init__(self, hostname: str, port: int, username: str, password: str, 
-                 notify_callback: Callable[[str, str], None], timeout: int = 10) -> None:
+                 notify_callback: Callable[[str, str], None], timeout: int = 10, 
+                 verify_host_key: bool = True) -> None:
         """Initialize SSH connection parameters.
         
         Args:
@@ -55,6 +58,7 @@ class SSHConnection:
             password: The SSH password.
             notify_callback: Callback for status/error notifications.
             timeout: Connection timeout in seconds.
+            verify_host_key: Whether to verify host keys (recommended for security).
         """
         self.hostname = hostname
         self.port = port
@@ -69,6 +73,7 @@ class SSHConnection:
         self.notify = notify_callback
         self.timeout = timeout
         self.keepalive_interval = 30  # Send keepalive every 30 seconds
+        self.verify_host_key = verify_host_key
         self._lock = threading.Lock()
     def connect(self) -> bool:
         """Establish SSH connection with interactive shell.
@@ -82,15 +87,44 @@ class SSHConnection:
         """
         try:
             self.client = paramiko.SSHClient()
-            self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             
-            self.client.connect(
-                hostname=self.hostname,
-                port=self.port,
-                username=self.username,
-                password=self.password,
-                timeout=self.timeout
-            )
+            # Configure host key policy based on security preference
+            if self.verify_host_key:
+                # Security: Use RejectPolicy for production environments
+                self.client.set_missing_host_key_policy(paramiko.RejectPolicy())
+                # Load known hosts file if it exists
+                try:
+                    self.client.load_system_host_keys()
+                    self.client.load_host_keys(os.path.expanduser("~/.ssh/known_hosts"))
+                except Exception:
+                    self.notify("Warning: Could not load known hosts file. Host key verification may fail.", "warning")
+            else:
+                # Educational: AutoAddPolicy for learning environments (less secure)
+                self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                self.notify("WARNING: Using insecure host key policy (AutoAddPolicy). This creates MITM vulnerability.", "warning")
+            
+            # Connect with retry logic
+            max_retries = 3
+            retry_delay = 2
+            
+            for attempt in range(max_retries):
+                try:
+                    self.client.connect(
+                        hostname=self.hostname,
+                        port=self.port,
+                        username=self.username,
+                        password=self.password,
+                        timeout=self.timeout,
+                        allow_agent=False,  # Don't use SSH agent for security
+                        look_for_keys=False  # Don't look for private keys
+                    )
+                    break  # Connection successful
+                except (paramiko.AuthenticationException, paramiko.SSHException) as e:
+                    if attempt == max_retries - 1:
+                        raise  # Re-raise on final attempt
+                    self.notify(f"Connection attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s...", "warning")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
             
             # Create interactive shell
             self.channel = self.client.invoke_shell(term='xterm-color', width=80, height=24)
@@ -198,7 +232,8 @@ class SSHConnection:
             except Exception as e:
                 self.notify(f"Error closing SSH client: {e}", "warning")
         
-        # Clear sensitive data
+        # Clear sensitive data securely
+        self.password = "" * len(self.password)  # Overwrite memory
         self.password = ""
     def set_output_callback(self, callback: Callable[[str], None]) -> None:
         """Set the callback function for handling SSH output.
@@ -232,7 +267,8 @@ class SSHManager:
         self._lock = threading.Lock()
 
     def create_connection(self, session_id: str, hostname: str, port: int,
-                          username: str, password: str, timeout: int = 10) -> bool:
+                          username: str, password: str, timeout: int = 10, 
+                          verify_host_key: bool = True) -> bool:
         """Create new SSH connection with validation and session management.
         
         Creates a new SSH connection and stores it in the connections dictionary.
@@ -246,6 +282,7 @@ class SSHManager:
             username: The SSH username.
             password: The SSH password.
             timeout: Connection timeout in seconds.
+            verify_host_key: Whether to verify host keys (recommended for security).
             
         Returns:
             bool: True if connection was successful, False otherwise.
@@ -255,7 +292,7 @@ class SSHManager:
             if session_id in self.connections:
                 self.disconnect_session(session_id)
             
-            connection = SSHConnection(hostname, port, username, password, self.notify, timeout)
+            connection = SSHConnection(hostname, port, username, password, self.notify, timeout, verify_host_key)
             if connection.connect():
                 self.connections[session_id] = connection
                 return True

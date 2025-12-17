@@ -1,7 +1,17 @@
+# Core dependencies for BanditCLI
+# Install with: pip install -r requirements.txt
+
+# Terminal User Interface framework
 textual==0.80.0
+
+# SSH client library
 paramiko==4.0.0
+
+# OpenAI API client (for AI mentor functionality)
 openai==1.99.9
+
+# Unified LLM interface (supports multiple AI providers)
 litellm==1.61.15
-beautifulsoup4==4.13.4
-requests==2.32.4
+
+# Environment variable management
 python-dotenv==1.0.1
