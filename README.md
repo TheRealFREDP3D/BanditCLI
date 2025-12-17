@@ -1,6 +1,6 @@
 # Bandit Wargame CLI
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg) ![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg) ![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg) ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
 
 A terminal-based interface for playing the OverTheWire Bandit wargame, built with Python and the Textual framework. This CLI application provides a simplified interface for playing the challenges, featuring:
 
@@ -88,7 +88,11 @@ A terminal-based interface for playing the OverTheWire Bandit wargame, built wit
    ```bash
    pip install -r requirements.txt
    ```
-5. Set your OpenAI API key as an environment variable:
+5. (Optional) Install development dependencies for code quality tools:
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+6. Set your OpenAI API key as an environment variable:
    ```bash
    export OPENAI_API_KEY="your-openai-api-key-here"  # On Windows: set OPENAI_API_KEY=your-openai-api-key-here
    ```
@@ -227,6 +231,50 @@ bandit-cli-app/
 
 For additional help, see [SECURITY.md](SECURITY.md) for security-related issues or open an issue on GitHub.
 
+## Development
+
+### Code Quality Tools
+
+This project uses modern Python code quality tools:
+
+- **Black**: Code formatting (`black src/ tests/`)
+- **Ruff**: Linting and code analysis (`ruff check src/ tests/`)
+- **MyPy**: Type checking (`mypy src/`)
+
+### Development Setup
+
+1. Install development dependencies:
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+
+2. Format code:
+   ```bash
+   black src/ tests/
+   ```
+
+3. Run linting:
+   ```bash
+   ruff check src/ tests/
+   ```
+
+4. Type checking:
+   ```bash
+   mypy src/
+   ```
+
+5. Run tests:
+   ```bash
+   pytest tests/
+   ```
+
+### Code Standards
+
+- All public functions and classes must have comprehensive docstrings in Google style
+- All functions must have type hints
+- Code should follow PEP 8 standards (enforced by Black and Ruff)
+- New features should include appropriate tests
+
 ## Contributing
 
 We welcome contributions of all kinds! See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:
@@ -263,4 +311,5 @@ We take security seriously in this educational tool. See [SECURITY.md](SECURITY.
 
 - [OverTheWire](https://overthewire.org/) for providing the Bandit wargame
 - [Textual](https://github.com/Textualize/textual) for the terminal user interface framework
-- [OpenAI](https://openai.com/) for AI mentor capabilities
+- [OpenAI](https://openai.com/) for AI mentor capabilities 
+ 

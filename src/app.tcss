@@ -203,3 +203,23 @@ Input.-invalid {
 Input.-valid {
     border: solid green;
 }
+
+/* Custom footer styling */
+VersionFooter {
+    height: 1;
+    background: $surface;
+    border-top: solid $secondary;
+}
+
+VersionFooter > Horizontal {
+    height: 100%;
+    align: center middle;
+}
+
+#version-label {
+    margin: 0 1;
+    padding: 0 1;
+    color: $primary;
+    text-style: bold;
+    width: 8;
+}

@@ -1,8 +1,17 @@
+"""AI mentor module for BanditCLI.
+
+This module provides AI-powered mentoring capabilities for the OverTheWire Bandit
+wargame using LiteLLM for flexible model support. It includes educational guidance,
+hint provision, and command explanations while maintaining conversation context.
+
+The BanditAIMentor class handles AI interactions with proper educational constraints,
+ensuring users learn concepts rather than receiving direct solutions.
+"""
 # src/ai_mentor.py
 import os
 import json
 import importlib.resources
-from typing import List, Dict, Callable, Generator
+from typing import List, Dict, Callable, Generator, Optional
 
 try:
     import litellm
@@ -10,7 +19,35 @@ try:
 except ImportError:
     LITELLM_AVAILABLE = False
 class BanditAIMentor:
-    def __init__(self, notify_callback: Callable[[str, str], None], model: str = None, data_file_path: str = "ai_mentor_data.json"):
+    """AI-powered mentor for Bandit wargame educational guidance.
+    
+    This class provides AI mentoring capabilities for the OverTheWire Bandit
+    wargame, offering educational guidance, hints, and command explanations.
+    It uses LiteLLM for flexible model support and maintains conversation
+    history for context-aware responses.
+    
+    The mentor is designed to teach concepts rather than provide direct solutions,
+    following educational best practices for cybersecurity learning.
+    
+    Attributes:
+        notify (Callable[[str, str], None]): Callback for status notifications.
+        model (str): The AI model to use for responses.
+        data_file_path (str): Path to the JSON data file for hints and explanations.
+        level_hints (Dict[str, str]): Predefined hints for each level.
+        command_explanations (Dict[str, str]): Educational explanations for commands.
+        disabled (bool): Flag indicating if AI mentor is disabled.
+        conversation_history (Dict[str, List[Dict[str, str]]]): Session conversation history.
+        system_prompt (str): System prompt defining AI mentor behavior and constraints.
+    """
+    def __init__(self, notify_callback: Callable[[str, str], None], 
+                 model: Optional[str] = None, data_file_path: str = "ai_mentor_data.json") -> None:
+        """Initialize AI mentor with notification callback and configuration.
+        
+        Args:
+            notify_callback: Callback for status/error notifications.
+            model: The AI model to use (defaults to OPENAI_MODEL env var or gpt-3.5-turbo).
+            data_file_path: Path to JSON file containing level hints and command explanations.
+        """
         self.notify = notify_callback
         self.model: str = model or os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
         self.data_file_path: str = data_file_path
@@ -60,8 +97,13 @@ CONTEXT AWARENESS:
 
 Remember: Your goal is to teach and guide, not to solve problems for the user. Help them become better problem solvers and Linux users."""
 
-    def _load_data(self):
-        """Load data from the JSON file."""
+    def _load_data(self) -> None:
+        """Load level hints and command explanations from JSON data file.
+        
+        Attempts to load the JSON data file containing predefined level hints
+        and command explanations. Handles file not found and JSON decode errors
+        gracefully by initializing empty dictionaries.
+        """
         try:
             with importlib.resources.open_text("src", self.data_file_path) as f:
                 data = json.load(f)
@@ -72,7 +114,7 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             self.level_hints = {}
             self.command_explanations = {}
 
-    def _trim_conversation_history(self, session_id: str, max_history: int = 10):
+    def _trim_conversation_history(self, session_id: str, max_history: int = 10) -> None:
         """Trim the conversation history to the specified maximum length.
         
         Args:
@@ -86,17 +128,28 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
                 self.conversation_history[session_id] = history[-max_history:]
 
     def get_response(self, user_message: str, session_id: str = "default", 
-                    current_level: int = 0, recent_commands: List[str] = None,
+                    current_level: int = 0, recent_commands: Optional[List[str]] = None,
                     terminal_output: str = "", stream: bool = True) -> Generator[str, None, None]:
-        """Get a response from the AI mentor.
+        """Generate AI mentor response with context awareness.
+        
+        Creates an educational response based on the user's message, current level,
+        recent commands, and terminal output. Uses streaming for real-time response
+        delivery and maintains conversation history for context.
         
         Args:
-            user_message: The user's message
-            session_id: Session identifier for conversation history
-            current_level: Current bandit level
-            recent_commands: Recent commands the user has tried
-            terminal_output: Recent terminal output for context
-            stream: Whether to stream the response
+            user_message: The user's question or message.
+            session_id: Session identifier for conversation history tracking.
+            current_level: Current Bandit level number.
+            recent_commands: List of recently executed commands for context.
+            terminal_output: Recent terminal output for additional context.
+            stream: Whether to stream the response (default: True).
+            
+        Yields:
+            str: Response chunks from the AI model.
+            
+        Note:
+            If AI is disabled, returns a message indicating the disabled status.
+            Handles API errors gracefully with fallback responses.
         """
         """Generate AI mentor response"""
         # If AI is disabled, return a default message
@@ -174,17 +227,46 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
         except Exception as e:
             self.notify(f"Error generating AI response: {e}", "error")
             yield "I'm sorry, I'm having trouble responding right now. Please try again later."
-    def clear_conversation(self, session_id: str = "default"):
-        """Clear conversation history for a session"""
+    def clear_conversation(self, session_id: str = "default") -> None:
+        """Clear conversation history for a specific session.
+        
+        Removes the conversation history for the given session ID,
+        effectively starting a fresh conversation.
+        
+        Args:
+            session_id: The session identifier to clear (default: "default").
+        """
         if session_id in self.conversation_history:
             del self.conversation_history[session_id]
 
     def get_level_hint(self, level_num: int) -> str:
-        """Get a general hint for a specific level without spoilers"""
+        """Get a general educational hint for a specific level.
+        
+        Provides a predefined hint for the specified level that guides
+        learning without revealing direct solutions or spoilers.
+        
+        Args:
+            level_num: The Bandit level number.
+            
+        Returns:
+            str: Educational hint for the level, or a general hint if none is defined.
+        """
         return self.level_hints.get(str(level_num),
             "Think about what the level description is asking you to find or do. Break down the problem into smaller steps.")
 
     def explain_command(self, command: str) -> str:
-        """Provide educational explanation of a command"""
+        """Provide educational explanation for a Linux command.
+        
+        Returns a predefined educational explanation for the given command,
+        focusing on its purpose and general usage rather than specific
+        applications that might spoil level solutions.
+        
+        Args:
+            command: The Linux command to explain.
+            
+        Returns:
+            str: Educational explanation of the command, or a general suggestion
+            to check the manual page if no specific explanation is available.
+        """
         return self.command_explanations.get(command.lower(),
             f"'{command}' is a Linux command. Try 'man {command}' to learn more about it.")
