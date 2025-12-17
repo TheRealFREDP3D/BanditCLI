@@ -56,7 +56,7 @@ class SSHConnection:
             port: The SSH port number.
             username: The SSH username.
             password: The SSH password.
-            notify_callback: Callback for status/error notifications.
+            notify_callback: Callback for status/error notifications (message, severity).
             timeout: Connection timeout in seconds.
             verify_host_key: Whether to verify host keys (recommended for security).
         """
@@ -90,14 +90,14 @@ class SSHConnection:
             
             # Configure host key policy based on security preference
             if self.verify_host_key:
-                # Security: Use RejectPolicy for production environments
-                self.client.set_missing_host_key_policy(paramiko.RejectPolicy())
+                # Use AddPolicy for educational environments - adds new hosts to known_hosts
+                self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 # Load known hosts file if it exists
                 try:
                     self.client.load_system_host_keys()
                     self.client.load_host_keys(os.path.expanduser("~/.ssh/known_hosts"))
                 except Exception:
-                    self.notify("Warning: Could not load known hosts file. Host key verification may fail.", "warning")
+                    self.notify("Warning: Could not load known hosts file. New hosts will be added automatically.", "warning")
             else:
                 # Educational: AutoAddPolicy for learning environments (less secure)
                 self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())

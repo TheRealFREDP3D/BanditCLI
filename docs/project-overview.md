@@ -16,7 +16,7 @@ Here's a breakdown of its architecture:
 
 `ssh_manager.py`: This module manages the SSH connection to the Bandit game server. It's responsible for connecting, sending your commands, and receiving the output. Features multi-session support, connection pooling, and robust error handling with automatic reconnection capabilities.
 
-`level_info.py`: This component loads and displays information about each Bandit level, like the goals and recommended commands. It gets this data from the bandit_levels.json file. Includes search functionality and fallback data handling.
+`level_info.py`: This component loads and displays information about each Bandit level, like the goals and recommended commands. It gets this data from the `src/bandit_levels.json` file. Includes search functionality and fallback data handling.
 
 `ai_mentor.py`: This is the AI assistant. It uses OpenAI's GPT-3.5 (via LiteLLM for multi-provider support) to give you hints based on your current level and the commands you've recently used. Features conversation history management, context-aware responses, and graceful fallback when AI services are unavailable.
 
@@ -34,7 +34,7 @@ Here's a breakdown of its architecture:
 
 `app.tcss`: This file styles the application, defining its colors and layout to make it look good in your terminal.
 
-`bandit_levels.json`: This file is a database of all the Bandit level information, which is displayed in the "Level Info" tab.
+`src/bandit_levels.json`: This file is a database of all the Bandit level information, which is displayed in the "Level Info" tab.
 
 `ai_mentor_data.json`: Contains level-specific hints and command explanations used by the AI mentor for context-aware responses.
 

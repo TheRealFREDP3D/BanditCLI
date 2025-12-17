@@ -99,9 +99,14 @@ A terminal-based interface for playing the OverTheWire Bandit wargame, built wit
 
 ## Usage
 
-Run the application with:
+After installation, you can run the application with:
 ```bash
-python src/main.py
+bandit-cli
+```
+
+Alternatively, you can run the application directly from the source code:
+```bash
+python -m src.main
 ```
 
 ### Navigation
@@ -178,7 +183,7 @@ bandit-cli-app/
 │   ├── cache.py             # Caching utilities
 │   ├── config.py            # Configuration management
 │   ├── app.tcss             # CSS styling for the application
-├── bandit_levels.json       # Level data scraped from OverTheWire
+│   └── bandit_levels.json   # Level data scraped from OverTheWire
 ├── requirements.txt         # Python dependencies
 ├── README.md               # This file
 └── .env                    # Environment variables (not included in repo)

@@ -11,11 +11,12 @@ three main tabs: Terminal, Level Info, and AI Mentor.
 from dotenv import load_dotenv
 from contextlib import suppress
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, TabbedContent, TabPane, TextArea, Input, Button, Label, LoadingIndicator
+from textual.widgets import Header, Footer, TabbedContent, TabPane, TextArea, Input, Button, Label, LoadingIndicator, Static
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.validation import Function, ValidationResult
 from textual.widget import Widget
+import os
 import re
 from typing import Optional, List, Callable, Any
 
@@ -27,6 +28,22 @@ from . import __version__
 # Load environment variables
 load_dotenv()
 
+class ConnectionStatus(Static):
+    """A widget to display SSH connection status with visual indicator."""
+    
+    connected = reactive(False)
+    
+    def render(self) -> str:
+        """Render the connection status indicator.
+        
+        Returns:
+            str: The status indicator with colored dot.
+        """
+        if self.connected:
+            return "[green]●[/green] Connected"
+        else:
+            return "[red]●[/red] Disconnected"
+
 class VersionFooter(Widget):
     """A custom footer widget that displays version information alongside key bindings."""
     
@@ -35,46 +52,6 @@ class VersionFooter(Widget):
         with Horizontal():
             yield Label(f"v{__version__}", id="version-label")
             yield Footer()
-
-def validate_port(value: str) -> ValidationResult:
-    """Validate port number.
-    
-    Args:
-        value: The port number string to validate.
-        
-    Returns:
-        ValidationResult: Success if valid, failure with message if invalid.
-    """
-    if not value:
-        return ValidationResult.success()
-    try:
-        port = int(value)
-        if 1 <= port <= 65535:
-            return ValidationResult.success()
-        else:
-            return ValidationResult.failure("Port must be between 1 and 65535")
-    except ValueError:
-        return ValidationResult.failure("Port must be a number")
-
-def validate_timeout(value: str) -> ValidationResult:
-    """Validate timeout value.
-    
-    Args:
-        value: The timeout value string to validate.
-        
-    Returns:
-        ValidationResult: Success if valid, failure with message if invalid.
-    """
-    if not value:
-        return ValidationResult.success()
-    try:
-        timeout = int(value)
-        if 1 <= timeout <= 300:
-            return ValidationResult.success()
-        else:
-            return ValidationResult.failure("Timeout must be between 1 and 300 seconds")
-    except ValueError:
-        return ValidationResult.failure("Timeout must be a number")
 
 def validate_username(value: str) -> ValidationResult:
     """Validate SSH username for security.
@@ -188,7 +165,7 @@ class BanditCLIApp(App):
         self.recent_commands = []
         self.terminal_output = ""
         self.offline_mode = False
-        self.ssh_manager = SSHManager(notify_callback=self.notify)
+        self.ssh_manager = SSHManager(notify_callback=self._notify_wrapper)
         self.level_info = BanditLevelInfo(notify_callback=self._notify_wrapper)
         self.ai_mentor = BanditAIMentor(notify_callback=self._notify_wrapper)
         self.ssh_connected = reactive(False)
@@ -199,7 +176,7 @@ class BanditCLIApp(App):
         """Called when the ssh_connected reactive property changes.
         
         Updates the UI state based on SSH connection status. Enables/disables
-        buttons and inputs as appropriate.
+        buttons and inputs as appropriate, and updates the connection status indicator.
         
         Args:
             connected: Whether SSH is connected or not.
@@ -210,6 +187,9 @@ class BanditCLIApp(App):
             self.query_one("#ssh_disconnect", Button).disabled = not connected
             self.query_one("#command_input", Input).disabled = not connected
             self.query_one("#send_button", Button).disabled = not connected
+            # Update connection status indicator
+            connection_status = self.query_one("#connection_status", ConnectionStatus)
+            connection_status.connected = connected
 
 
     def watch_loading(self, loading: bool) -> None:
@@ -238,7 +218,8 @@ class BanditCLIApp(App):
         
         with TabbedContent(initial="terminal"):
             with TabPane("Terminal", id="terminal"):
-                yield from self.compose_terminal_view()
+                with Vertical():
+                    yield from self.compose_terminal_view()
             with TabPane("Level Info", id="level"):
                 yield from self.compose_level_view()
             with TabPane("AI Mentor", id="mentor"):
@@ -254,48 +235,35 @@ class BanditCLIApp(App):
         
         Yields:
             LoadingIndicator: Shows loading state.
+            ConnectionStatus: Shows connection status with visual indicator.
             TextArea: Terminal output display.
             Various input widgets and buttons for SSH and command controls.
         """
-        with Vertical(id="terminal-view"):
-            yield LoadingIndicator()
-            yield TextArea(id="terminal_output", read_only=True)
-            with Horizontal(id="ssh-controls"):
-                with Vertical():
-                    yield Label("Username:")
-                    yield Input(
-                        placeholder="bandit0", 
-                        id="ssh_username",
-                        validators=[Function(validate_username, "Invalid username")]
-                    )
-                with Vertical():
-                    yield Label("Password:")
-                    yield Input(placeholder="bandit0", id="ssh_password", password=True)
-                with Vertical():
-                    yield Label("Port:")
-                    yield Input(
-                        placeholder="2220", 
-                        id="ssh_port",
-                        validators=[Function(validate_port, "Invalid port")]
-                    )
-                with Vertical():
-                    yield Label("Timeout:")
-                    yield Input(
-                        placeholder="10", 
-                        id="ssh_timeout",
-                        validators=[Function(validate_timeout, "Invalid timeout")]
-                    )
-                with Vertical(id="ssh-buttons"):
-                    yield Button("Connect", variant="primary", id="ssh_connect")
-                    yield Button("Disconnect", variant="error", id="ssh_disconnect")
-            with Horizontal(id="command-controls"):
-                yield Label("Command:")
+        yield LoadingIndicator()
+        with Horizontal(id="connection-status-bar"):
+            yield ConnectionStatus(id="connection_status")
+        yield TextArea(id="terminal_output", read_only=True)
+        with Vertical(id="ssh-controls"):
+            with Horizontal():
+                yield Label("Username:", id="username-label")
                 yield Input(
-                    placeholder="Enter command...", 
-                    id="command_input",
-                    validators=[Function(validate_command, "Invalid command")]
+                    placeholder="bandit0", 
+                    id="ssh_username",
+                    validators=[Function(validate_username, "Invalid username")]
                 )
-                yield Button("Send", variant="primary", id="send_button")
+                yield Label("Password:", id="password-label")
+                yield Input(placeholder="bandit0", id="ssh_password", password=True)
+            with Horizontal():
+                yield Button("Connect", variant="primary", id="ssh_connect")
+                yield Button("Disconnect", variant="error", id="ssh_disconnect")
+        with Horizontal(id="command-controls"):
+            yield Label("Command:")
+            yield Input(
+                placeholder="Enter command...", 
+                id="command_input",
+                validators=[Function(validate_command, "Invalid command")]
+            )
+            yield Button("Send", variant="primary", id="send_button")
 
     def compose_level_view(self) -> ComposeResult:
         """Compose the level information view.
@@ -348,6 +316,9 @@ class BanditCLIApp(App):
         self.query_one("#send_button", Button).disabled = True
         # Ensure loading indicators are hidden initially
         self.loading = False
+        # Hide loading indicators explicitly
+        for indicator in self.query(LoadingIndicator):
+            indicator.display = False
     def update_level_info(self) -> None:
         """Update the level information display.
         
@@ -410,14 +381,15 @@ class BanditCLIApp(App):
         try:
             username_input = self.query_one("#ssh_username", Input)
             password_input = self.query_one("#ssh_password", Input)
-            port_input = self.query_one("#ssh_port", Input)
-            timeout_input = self.query_one("#ssh_timeout", Input)
             
             # Validate inputs
             username = username_input.value or ""
             password = password_input.value or ""
-            port = port_input.value or "2220"
-            timeout_str = timeout_input.value
+            
+            # Use configuration values from environment variables
+            hostname = os.getenv("DEFAULT_SSH_HOST", "bandit.labs.overthewire.org")
+            port = os.getenv("DEFAULT_SSH_PORT", "2220")
+            timeout = os.getenv("DEFAULT_SSH_TIMEOUT", "10")
             
             # Check if inputs are valid
             if not username_input.validate(username):
@@ -428,18 +400,10 @@ class BanditCLIApp(App):
                 self._handle_error_and_stop_loading("Password is required")
                 return
             
-            if not port_input.validate(port):
-                self._handle_error_and_stop_loading("Invalid port")
-                return
-            
-            if not timeout_input.validate(timeout_str):
-                self._handle_error_and_stop_loading("Invalid timeout")
-                return
-            
             # Convert port and timeout to integer
             try:
                 port_int = int(port)
-                timeout_int = int(timeout_str)
+                timeout_int = int(timeout)
             except ValueError:
                 self._handle_error_and_stop_loading("Port and timeout must be valid numbers")
                 return
@@ -451,11 +415,12 @@ class BanditCLIApp(App):
             
             # Attempt to connect with security settings
             # Default to secure host key verification for educational tool
-            verify_host_key = not os.getenv("BANDIT_CLI_INSECURE", "").lower() in ("true", "1", "yes")
+            insecure_value = os.getenv("BANDIT_CLI_INSECURE", "").lower()
+            verify_host_key = insecure_value not in ("true", "1", "yes")
             
             success = self.ssh_manager.create_connection(
                 self.session_id,
-                "bandit.labs.overthewire.org",
+                hostname,
                 port_int,
                 username,
                 password,
@@ -467,14 +432,17 @@ class BanditCLIApp(App):
                 self.ssh_connected = True
                 self.notify("SSH connection established", severity="success")
                 # Set up the output callback
-            if (connection := self.ssh_manager.get_connection(self.session_id)):
-                connection.set_output_callback(self.on_ssh_output)
+                if (connection := self.ssh_manager.get_connection(self.session_id)):
+                    connection.set_output_callback(self.on_ssh_output)
             else:
                 self.notify("Failed to establish SSH connection. Please check your credentials, network connection, and ensure the Bandit server is accessible.", severity="error")
             self.loading = False
             
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
             self.notify(f"Error during SSH connection: {e}", severity="error")
+            self.notify(f"Full error details: {error_details}", severity="error")
             self.loading = False
     
     def disconnect_ssh(self) -> None:
@@ -684,6 +652,10 @@ class BanditCLIApp(App):
         if connection := self.ssh_manager.get_connection(self.session_id):
             connection.resize_pty(width=event.size.width, height=event.size.height - 10)
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run the BanditCLI application."""
     app = BanditCLIApp()
     app.run()
+
+if __name__ == "__main__":
+    main()

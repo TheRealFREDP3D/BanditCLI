@@ -42,6 +42,9 @@ dev = [
     "mypy>=1.7.0",
 ]
 
+[project.scripts]
+bandit-cli = "src.main:main"
+
 [tool.mypy]
 python_version = "3.8"
 warn_return_any = true
