@@ -46,7 +46,7 @@ Header {
 #send_button {
     width: 15%;
     margin: 1 1 1 0;
-min-width: 80px;
+min-width: 20w;
 }
 
 /* Level info styling */
@@ -165,7 +165,7 @@ Button:disabled {
 #command-controls > Label {
     width: auto;
     margin: 0 1 0 1;
-    min-width: 80px;
+    min-width: 20w;
 }
 
 /* Label styling */
@@ -202,15 +202,4 @@ Input.-invalid {
 
 Input.-valid {
     border: solid green;
-}
-
-/* Responsive design adjustments */
-@media (max-width: 100) {
-    #ssh_username, #ssh_password, #ssh_port, #ssh_timeout {
-        width: 20%;
-    }
-    
-    #command_input, #mentor_input {
-        width: 70%;
-    }
 }

@@ -178,15 +178,35 @@ bandit-cli-app/
 
 ## Contributing
 
+We welcome contributions of all kinds! See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:
+
+- Code style and standards (PEP 8, type hints)
+- Testing requirements and processes
+- Pull request workflow
+- Types of contributions we accept
+
+Quick start:
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
+3. Make your changes following our guidelines
 4. Test thoroughly
 5. Submit a pull request
 
 ## License
 
-This project is created for educational purposes. Please respect the OverTheWire terms of service when using this tool.
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+
+Created for educational purposes to help users learn cybersecurity concepts through the OverTheWire Bandit wargame.
+
+## Security
+
+We take security seriously in this educational tool. See [SECURITY.md](SECURITY.md) for:
+
+- Data handling and privacy policies
+- SSH security considerations
+- OpenAI API data sharing details
+- Security best practices for users
+- Responsible disclosure policy
 
 ## Acknowledgments
 

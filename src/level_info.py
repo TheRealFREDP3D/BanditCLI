@@ -2,7 +2,6 @@ import json
 import os
 from typing import Dict, List, Optional, Callable
 import importlib.resources
-from textual.app import Notify
 class BanditLevelInfo:
     def __init__(self, levels_file_path: str = "bandit_levels.json", notify_callback: Callable[[str, str], None] = None):
         self.levels_file_path = levels_file_path
@@ -19,7 +18,7 @@ class BanditLevelInfo:
             # Try to load from the src package first
             with importlib.resources.open_text("src", self.levels_file_path) as f:
                 data = json.load(f)
-                self.notify(f"Loaded {len(data)} levels from {self.levels_file_path}", "info")
+                self.notify(f"Loaded {len(data)} levels from {self.levels_file_path}", severity="info")
                 return data
         except (FileNotFoundError, AttributeError):
             # Fallback to relative path
@@ -28,13 +27,13 @@ class BanditLevelInfo:
                 file_path = os.path.join(current_dir, self.levels_file_path)
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    self.notify(f"Loaded {len(data)} levels from fallback path", "info")
+                    self.notify(f"Loaded {len(data)} levels from fallback path", severity="info")
                     return data
             except (FileNotFoundError, json.JSONDecodeError) as e:
-                self.notify(f"Error loading level data: {e}", "error")
+                self.notify(f"Error loading level data: {e}", severity="error")
                 return self._get_fallback_data()
         except json.JSONDecodeError as e:
-            self.notify(f"Invalid JSON in level data file: {e}", "error")
+            self.notify(f"Invalid JSON in level data file: {e}", severity="error")
             return self._get_fallback_data()
 
     def _get_fallback_data(self) -> Dict:

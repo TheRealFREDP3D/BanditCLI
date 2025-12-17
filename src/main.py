@@ -1,14 +1,15 @@
 # src/main.py
 from dotenv import load_dotenv
+from contextlib import suppress
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, TabbedContent, TabPane, TextArea, Input, Button, Label, LoadingIndicator
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.validation import Function, ValidationResult
 
-from ssh_manager import SSHManager
-from ai_mentor import BanditAIMentor
-from level_info import BanditLevelInfo
+from .ssh_manager import SSHManager
+from .ai_mentor import BanditAIMentor
+from .level_info import BanditLevelInfo
 
 # Load environment variables
 load_dotenv()
@@ -53,6 +54,10 @@ class BanditCLIApp(App):
         ("ctrl+c", "cancel_operation", "Cancel"),
     ]
     
+    def _notify_wrapper(self, message: str, severity: str):
+        """Wrapper to convert callback signature to Textual notify signature"""
+        self.notify(message, severity=severity)
+    
     def __init__(self):
         super().__init__()
         self.current_level = 0
@@ -60,22 +65,25 @@ class BanditCLIApp(App):
         self.recent_commands = []
         self.terminal_output = ""
         self.ssh_manager = SSHManager(notify_callback=self.notify)
-        self.level_info = BanditLevelInfo(notify_callback=self.notify)
-        self.ai_mentor = BanditAIMentor(notify_callback=self.notify)
+        self.level_info = BanditLevelInfo(notify_callback=self._notify_wrapper)
+        self.ai_mentor = BanditAIMentor(notify_callback=self._notify_wrapper)
         self.ssh_connected = reactive(False)
         self.loading = reactive(False)
         self.ai_generating = reactive(False)
 
     def watch_ssh_connected(self, connected: bool):
         """Called when the ssh_connected reactive property changes."""
-        try:
+        with suppress(Exception):
+            # Widgets might not be ready yet
             self.query_one("#ssh_connect", Button).disabled = connected
             self.query_one("#ssh_disconnect", Button).disabled = not connected
             self.query_one("#command_input", Input).disabled = not connected
             self.query_one("#send_button", Button).disabled = not connected
-        except Exception:
-            # Widgets might not be ready yet
-            pass
+
+    def on_mount(self) -> None:
+        """Called when the app is mounted."""
+        # Ensure loading indicators are hidden initially
+        self.loading = False
 
     def watch_loading(self, loading: bool):
         """Called when the loading reactive property changes."""
@@ -186,6 +194,11 @@ class BanditCLIApp(App):
         elif event.input.id == "mentor_input":
             self.send_mentor_message()
 
+    def _handle_error_and_stop_loading(self, message: str) -> None:
+        """Handle error notification and stop loading."""
+        self.notify(message, severity="error")
+        self.loading = False
+
     def connect_ssh(self):
         """Connect to the SSH server with validation."""
         self.loading = True
@@ -202,8 +215,7 @@ class BanditCLIApp(App):
             timeout_str = timeout_input.value
             
             if not username or not password:
-                self.notify("Please enter both username and password", severity="error")
-                self.loading = False
+                self._handle_error_and_stop_loading("Please enter both username and password")
                 return
             
             # Convert port and timeout to integer
@@ -211,8 +223,7 @@ class BanditCLIApp(App):
                 port_int = int(port)
                 timeout_int = int(timeout_str)
             except ValueError:
-                self.notify("Port and timeout must be valid numbers", severity="error")
-                self.loading = False
+                self._handle_error_and_stop_loading("Port and timeout must be valid numbers")
                 return
                 
             # Validate port range
@@ -234,9 +245,8 @@ class BanditCLIApp(App):
                 self.ssh_connected = True
                 self.notify("SSH connection established", severity="success")
                 # Set up the output callback
-                connection = self.ssh_manager.get_connection(self.session_id)
-                if connection:
-                    connection.set_output_callback(self.on_ssh_output)
+            if (connection := self.ssh_manager.get_connection(self.session_id)):
+                connection.set_output_callback(self.on_ssh_output)
             else:
                 self.notify("Failed to establish SSH connection. Please check your credentials, network connection, and ensure the Bandit server is accessible.", severity="error")
             self.loading = False
@@ -281,12 +291,41 @@ class BanditCLIApp(App):
             self.recent_commands.pop(0)
         
         # Send command to SSH server
-        connection = self.ssh_manager.get_connection(self.session_id)
-        if connection:
+        if (connection := self.ssh_manager.get_connection(self.session_id)):
             connection.send_command(command + "\n")
         
         # Clear the input
         command_input.value = ""
+
+    def _handle_mentor_response(self, message: str) -> None:
+        """Handle AI mentor response generation."""
+        try:
+            mentor_chat = self.query_one("#mentor_chat", TextArea)
+            current_text = mentor_chat.text or ""
+            mentor_chat.load_text(f"{current_text}\nYou: {message}\nMentor: ")
+            
+            # Get AI response
+            response_stream = self.ai_mentor.get_response(
+                message,
+                self.session_id,
+                self.current_level,
+                self.recent_commands,
+                self.terminal_output
+            )
+            
+            # Stream response
+            for chunk in response_stream:
+                mentor_chat.insert(chunk)
+                mentor_chat.move_cursor((mentor_chat.cursor_row, mentor_chat.cursor_column + len(chunk)))
+            
+        except Exception as e:
+            self.notify(f"Error getting AI response: {e}", severity="error")
+        finally:
+            # Clear input
+            mentor_input = self.query_one("#mentor_input", Input)
+            mentor_input.value = ""
+            self.loading = False
+            self.ai_generating = False
 
     def send_mentor_message(self):
         """Send a message to the AI mentor."""
@@ -304,34 +343,7 @@ class BanditCLIApp(App):
         self.ai_generating = True
         self.loading = True
         
-        try:
-            mentor_chat = self.query_one("#mentor_chat", TextArea)
-            current_text = mentor_chat.text or ""
-            mentor_chat.load_text(f"{current_text}\nYou: {message}\nMentor: ")
-            
-            # Get AI response
-            response_stream = self.ai_mentor.get_response(
-                message,
-                self.session_id,
-                self.current_level,
-                self.recent_commands,
-                self.terminal_output[-1000:]  # Last 1000 chars of output
-            )
-            
-            # Stream response
-            for chunk in response_stream:
-                mentor_chat.load_text(mentor_chat.text + chunk)
-                mentor_chat.scroll_end(animate=False)
-            
-            mentor_chat.load_text(mentor_chat.text + "\n")
-            
-        except Exception as e:
-            self.notify(f"Error getting AI response: {e}", severity="error")
-        finally:
-            # Clear input
-            mentor_input.value = ""
-            self.loading = False
-            self.ai_generating = False
+        self._handle_mentor_response(message)
 
     def previous_level(self):
         """Go to the previous level."""
