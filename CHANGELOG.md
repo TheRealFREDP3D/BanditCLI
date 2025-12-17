@@ -1,24 +1,14 @@
 # Changelog
-
 All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
 ### Added
-
 ### Changed
-
 ### Fixed
 
-
 ## [0.2.0] - 2024-12-16
-
 ### Added
-
 - Comprehensive unit testing framework with 77 passing tests
 - Command history functionality with up/down arrow navigation
 - Persistent command history storage
@@ -30,7 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keyboard shortcut for toggling offline mode ('o')
 
 ### Changed
-
 - Improved SSH connection error messages with specific failure types
 - Enhanced input validation for SSH credentials and port numbers
 - Added command length validation (max 1000 characters)
@@ -41,7 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved configuration management with default values and validation
 
 ### Fixed
-
 - SSH connection error handling for various failure types
 - Command history deduplication
 - Session persistence and management
@@ -50,25 +38,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AI mentor response handling and error recovery
 
 ### Security
-
 - Added input sanitization for SSH credentials
 - Added validation for dangerous commands
 - Implemented graceful degradation for failed components
 
 ### Performance
-
 - Added caching for level information, AI hints, and command explanations
 - Optimized terminal output rendering
 - Improved configuration loading with lazy loading
 - Added file-based caching system with expiration
 
-
 ## [0.1.0] - 2024-12-15
-
 ### Added
-
 - Initial release with basic SSH terminal interface
 - Level information display
 - AI mentor system with OpenAI integration
 - Tabbed interface for navigation
 - Basic error handling
+
+---
+This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).

@@ -9,13 +9,17 @@ The `_DEV_` directory serves as a workspace for development-related documents th
 ## Structure
 
 ### Active Documentation
+
 - `app_design.md` - Core design documentation that remains relevant to active development
+- `v0.2-Review.md` - Version 0.2 review document with implementation feedback
 
 ### Archived Documentation  
+
 - `archive/` - Historical development artifacts that may have reference value but are not actively used
   - `BanditCLI-Gemini Review.md` - Review document from external assessment
 
 ### Gitignored Files
+
 The following files are tracked in `.gitignore` and should not be committed:
 - `CONVERSION_SUMMARY.md` - Migration documentation
 - `Refining points for v0.2.md` - Version planning notes  
