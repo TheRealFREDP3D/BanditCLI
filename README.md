@@ -1,5 +1,7 @@
 # Bandit Wargame CLI
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg) ![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)
+
 A terminal-based interface for playing the OverTheWire Bandit wargame, built with Python and the Textual framework. This CLI application provides a simplified interface for playing the challenges, featuring:
 
 - SSH Terminal Interface: Real-time SSH connection to the Bandit server
@@ -9,6 +11,16 @@ A terminal-based interface for playing the OverTheWire Bandit wargame, built wit
 - Session Management: Save and switch between multiple sessions
 - Offline Mode: Access level information and review sessions without internet
 - Caching: Improved performance through intelligent caching of frequently accessed data
+
+## ⚠️ Important Notes
+
+### Level Availability
+
+⚠️ **Level Data Availability**: Currently, only levels 0-5 (6 out of 34 Bandit levels) have full support with detailed goals, commands, and reading materials. For levels 6-33, the application will display a message directing you to the [official OverTheWire Bandit website](https://overthewire.org/wargames/bandit/).
+
+### Data Privacy
+
+🔒 **Data Privacy Notice**: When using the AI Mentor, your recent commands (last 5) and terminal output (up to 500 characters) are sent to OpenAI's API for context-aware responses. No passwords or sensitive credentials are intentionally sent, but be aware that command history may contain sensitive information. You can disable the AI Mentor by not setting the `OPENAI_API_KEY` environment variable.
 
 ## Features
 
@@ -175,6 +187,45 @@ bandit-cli-app/
 - **AI Integration**: OpenAI API (GPT-3.5)
 - **Data**: JSON file containing scraped level data from OverTheWire
 - **Caching**: File-based caching system for improved performance
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### SSH Connection Fails
+- Verify port 2220 is accessible
+- Check your network connection and firewall settings
+- Ensure your credentials are correct
+- Try using a different network if behind a restrictive firewall
+
+#### AI Mentor Not Working
+- Verify `OPENAI_API_KEY` is set correctly
+- Check API key validity and billing status
+- Ensure internet connectivity
+- Check [OpenAI's API status](https://status.openai.com/)
+
+#### Command History Not Saving
+- Verify write permissions for `~/.bandit_cli/` directory
+- Check available disk space
+- Try restarting the application
+
+#### Terminal Display Issues
+- Try resizing your terminal window
+- Check terminal emulator compatibility
+- Ensure your terminal supports UTF-8
+
+#### Level Information Missing
+- Note that only levels 0-5 are currently available
+- Visit [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) for other levels
+- Check for application updates that might add more levels
+
+#### Application Won't Start
+- Verify Python 3.8+ is installed
+- Check all dependencies are installed: `pip install -r requirements.txt`
+- Look for conflicting packages in your Python environment
+- Check the terminal for specific error messages
+
+For additional help, see [SECURITY.md](SECURITY.md) for security-related issues or open an issue on GitHub.
 
 ## Contributing
 
