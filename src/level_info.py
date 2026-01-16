@@ -7,26 +7,28 @@ JSON files, with fallback data handling for missing files.
 The BanditLevelInfo class is the main interface for accessing level information,
 including goals, recommended commands, and reading materials.
 """
+import importlib.resources
 import json
 import os
-from typing import Dict, List, Optional, Callable
-import importlib.resources
+from typing import Callable, Dict, List, Optional
+
+
 class BanditLevelInfo:
     """Manager for Bandit level information and educational content.
-    
+
     This class handles loading and managing level data for the OverTheWire Bandit
     wargame. It provides methods to access level information, format it for display,
     and search across levels. Includes robust error handling and fallback data.
-    
+
     Attributes:
         levels_file_path (str): Path to the JSON file containing level data.
         notify (Callable[[str, str], None]): Callback for status notifications.
         levels_data (Dict): Loaded level data dictionary.
     """
-    def __init__(self, levels_file_path: str = "bandit_levels.json", 
+    def __init__(self, levels_file_path: str = "bandit_levels.json",
                  notify_callback: Optional[Callable[[str, str], None]] = None) -> None:
         """Initialize level info manager with file path and notification callback.
-        
+
         Args:
             levels_file_path: Path to the JSON file containing level data.
             notify_callback: Optional callback for status notifications.
@@ -37,7 +39,7 @@ class BanditLevelInfo:
 
     def _default_notify(self, message: str, severity: str = "info") -> None:
         """Default notification handler that prints messages to console.
-        
+
         Args:
             message: The message to display.
             severity: The severity level of the message.
@@ -46,11 +48,11 @@ class BanditLevelInfo:
 
     def _load_levels_data(self) -> Dict:
         """Load level data from JSON file with comprehensive error handling.
-        
+
         Attempts to load level data from the specified JSON file, first trying
         to load from the src package resources, then falling back to a relative
         path. If both fail, uses fallback data to ensure basic functionality.
-        
+
         Returns:
             Dict: Loaded level data or fallback data if loading fails.
         """
@@ -65,7 +67,7 @@ class BanditLevelInfo:
             try:
                 current_dir = os.path.dirname(os.path.abspath(__file__))
                 file_path = os.path.join(current_dir, self.levels_file_path)
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, encoding='utf-8') as f:
                     data = json.load(f)
                     self.notify(f"Loaded {len(data)} levels from fallback path", severity="info")
                     return data
@@ -78,10 +80,10 @@ class BanditLevelInfo:
 
     def _get_fallback_data(self) -> Dict:
         """Provide basic fallback data if level file can't be loaded.
-        
+
         Returns minimal level data for Level 0 to ensure the application
         remains functional even when the main data file is unavailable.
-        
+
         Returns:
             Dict: Basic fallback level data.
         """
@@ -97,10 +99,10 @@ class BanditLevelInfo:
         }
     def get_level_info(self, level_num: int) -> Optional[Dict]:
         """Get complete information for a specific level.
-        
+
         Args:
             level_num: The level number to retrieve information for.
-            
+
         Returns:
             Optional[Dict]: Level information dictionary, or None if not found.
         """
@@ -109,7 +111,7 @@ class BanditLevelInfo:
 
     def get_all_levels(self) -> Dict:
         """Get information for all available levels.
-        
+
         Returns:
             Dict: Complete dictionary of all loaded level data.
         """
@@ -117,7 +119,7 @@ class BanditLevelInfo:
 
     def get_available_levels(self) -> List[int]:
         """Get sorted list of available level numbers.
-        
+
         Returns:
             List[int]: Sorted list of numeric level identifiers.
         """
@@ -125,10 +127,10 @@ class BanditLevelInfo:
 
     def get_level_goal(self, level_num: int) -> str:
         """Get the goal description for a specific level.
-        
+
         Args:
             level_num: The level number to get the goal for.
-            
+
         Returns:
             str: The level goal description, or a default message if not found.
         """
@@ -139,10 +141,10 @@ class BanditLevelInfo:
 
     def get_recommended_commands(self, level_num: int) -> List[str]:
         """Get recommended commands for a specific level.
-        
+
         Args:
             level_num: The level number to get commands for.
-            
+
         Returns:
             List[str]: List of recommended commands, or empty list if not found.
         """
@@ -153,10 +155,10 @@ class BanditLevelInfo:
 
     def get_reading_materials(self, level_num: int) -> List[Dict[str, str]]:
         """Get reading materials for a specific level.
-        
+
         Args:
             level_num: The level number to get reading materials for.
-            
+
         Returns:
             List[Dict[str, str]]: List of reading material dictionaries with title and URL.
         """
@@ -167,14 +169,14 @@ class BanditLevelInfo:
 
     def format_level_info(self, level_num: int) -> str:
         """Format level information as a readable markdown string.
-        
+
         Creates a formatted markdown representation of level information including
         title, goal, recommended commands, reading materials, and official level URL.
         Handles missing levels gracefully by showing available alternatives.
-        
+
         Args:
             level_num: The level number to format information for.
-            
+
         Returns:
             str: Formatted markdown string of level information.
         """
@@ -191,12 +193,12 @@ If you're working on a level beyond our data, refer to:
 https://overthewire.org/wargames/bandit/"""
 
         formatted_info = f"# Bandit Level {level_num}"
-        
+
         # Add title if available
         title = level_info.get("title", "")
         if title and title.strip():
             formatted_info += f" - {title}"
-        
+
         formatted_info += "\n\n"
 
         # Add goal
@@ -207,7 +209,7 @@ https://overthewire.org/wargames/bandit/"""
         # Add recommended commands
         commands = level_info.get("commands", [])
         if commands:
-            formatted_info += f"## Recommended Commands\n"
+            formatted_info += "## Recommended Commands\n"
             for command in commands:
                 formatted_info += f"- `{command}`\n"
             formatted_info += "\n"
@@ -215,14 +217,17 @@ https://overthewire.org/wargames/bandit/"""
         # Add reading materials
         materials = level_info.get("reading_material", [])
         if materials:
-            formatted_info += f"## Reading Materials\n"
+            formatted_info += "## Reading Materials\n"
             for material in materials:
-                title = material.get("title", "")
-                url = material.get("url", "")
-                if title and url:
-                    formatted_info += f"- [{title}]({url})\n"
-                elif title:
-                    formatted_info += f"- {title}\n"
+                if isinstance(material, dict):
+                    title = material.get("title", "")
+                    url = material.get("url", "")
+                    if title and url:
+                        formatted_info += f"- [{title}]({url})\n"
+                    elif title:
+                        formatted_info += f"- {title}\n"
+                elif isinstance(material, str):
+                    formatted_info += f"- {material}\n"
             formatted_info += "\n"
 
         # Add level URL if available
@@ -234,34 +239,34 @@ https://overthewire.org/wargames/bandit/"""
 
     def search_levels(self, query: str) -> List[int]:
         """Search levels by goal description or command content.
-        
+
         Performs a case-insensitive search across level goals and recommended
         commands to find levels matching the query.
-        
+
         Args:
             query: Search query string.
-            
+
         Returns:
             List[int]: Sorted list of matching level numbers.
         """
         query_lower = query.lower()
         matching_levels = []
-        
+
         for level_key, level_data in self.levels_data.items():
             if not level_key.isdigit():
                 continue
-                
+
             level_num = int(level_key)
-            
+
             # Search in goal
             goal = level_data.get("goal", "").lower()
             if query_lower in goal:
                 matching_levels.append(level_num)
                 continue
-            
+
             # Search in commands
             commands = level_data.get("commands", [])
             if any(query_lower in cmd.lower() for cmd in commands):
                 matching_levels.append(level_num)
-        
+
         return sorted(matching_levels)

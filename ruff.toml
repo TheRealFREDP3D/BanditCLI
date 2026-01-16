@@ -5,6 +5,7 @@ line-length = 100
 target-version = "py38"
 
 # Select rules to enforce
+[lint]
 select = [
     "E",   # pycodestyle errors
     "F",   # pyflakes
@@ -35,6 +36,6 @@ exclude = [
 ]
 
 # Per-file ignores
-[per-file-ignores]
+[lint.per-file-ignores]
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py
 "test_*.py" = ["S101"]    # Allow asserts in tests

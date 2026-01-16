@@ -1,27 +1,20 @@
 {
   "0": {
     "level": 0,
-    "title": "",
-    "goal": "The goal of this level is for you to log into the game using SSH.\nThe host to which you need to connect is\nbandit.labs.overthewire.org, on port 2220.\nThe username is bandit0 and the password is bandit0. Once\nlogged in, go to the Level 1 page to find out how to beat Level\n1.",
+    "goal": "The goal of this level is for you to log into the game using SSH.\nThe host to which you need to connect is\nbandit.labs.overthewire.org\n, on port 2220.\nThe username is\nbandit0\nand the password is\nbandit0\n. Once\nlogged in, go to the\nLevel 1\npage to find out how to beat Level\n1.",
     "commands": [
       "ssh"
     ],
     "reading_material": [
-      {
-        "title": "Secure Shell (SSH) on Wikipedia",
-        "url": "https://en.wikipedia.org/wiki/Secure_Shell"
-      },
-      {
-        "title": "How to use SSH on wikiHow",
-        "url": "https://www.wikihow.com/Use-SSH"
-      }
+      "Secure Shell (SSH) on Wikipedia",
+      "How to use SSH with a non-standard port on It\u2019s FOSS",
+      "How to use SSH with ssh-keys on wikiHow"
     ],
     "url": "https://overthewire.org/wargames/bandit/bandit0.html"
   },
   "1": {
     "level": 1,
-    "title": "",
-    "goal": "The password for the next level is stored in a file called\nreadme located in the home directory. Use this password to log\ninto bandit1 using SSH. Whenever you find a password for a level,\nuse SSH (on port 2220) to log into that level and continue the game.",
+    "goal": "The password for the next level is stored in a file called\nreadme\nlocated in the home directory. Use this password to log\ninto bandit1 using SSH. Whenever you find a password for a level,\nuse SSH (on port 2220) to log into that level and continue the game.",
     "commands": [
       "ls",
       "cd",
@@ -35,8 +28,7 @@
   },
   "2": {
     "level": 2,
-    "title": "",
-    "goal": "The password for the next level is stored in a file called -\nlocated in the home directory",
+    "goal": "The password for the next level is stored in a file called\n-\nlocated in the home directory",
     "commands": [
       "ls",
       "cd",
@@ -46,21 +38,14 @@
       "find"
     ],
     "reading_material": [
-      {
-        "title": "Google Search for “dashed filename”",
-        "url": "https://www.google.com/search?q=dashed+filename"
-      },
-      {
-        "title": "Advanced Bash-scripting Guide - Chapter 3 - Special Characters",
-        "url": "https://linux.die.net/abs-guide/special-chars.html"
-      }
+      "Google Search for \u201cdashed filename\u201d",
+      "Advanced Bash-scripting Guide - Chapter 3 - Special Characters"
     ],
     "url": "https://overthewire.org/wargames/bandit/bandit2.html"
   },
   "3": {
     "level": 3,
-    "title": "",
-    "goal": "The password for the next level is stored in a file called –spaces\nin this filename– located in the home directory",
+    "goal": "The password for the next level is stored in a file called\n--spaces\nin this filename--\nlocated in the home directory",
     "commands": [
       "ls",
       "cd",
@@ -70,17 +55,13 @@
       "find"
     ],
     "reading_material": [
-      {
-        "title": "Google Search for “spaces in filename”",
-        "url": "https://www.google.com/search?q=spaces+in+filename"
-      }
+      "Google Search for \u201cspaces in filename\u201d"
     ],
     "url": "https://overthewire.org/wargames/bandit/bandit3.html"
   },
   "4": {
     "level": 4,
-    "title": "",
-    "goal": "The password for the next level is stored in a hidden file in the\ninhere directory.",
+    "goal": "The password for the next level is stored in a hidden file in the\ninhere\ndirectory.",
     "commands": [
       "ls",
       "cd",
@@ -94,8 +75,7 @@
   },
   "5": {
     "level": 5,
-    "title": "",
-    "goal": "The password for the next level is stored in the only human-readable\nfile in the inhere directory. Tip: if your terminal is messed\nup, try the “reset” command.",
+    "goal": "The password for the next level is stored in the only human-readable\nfile in the\ninhere\ndirectory. Tip: if your terminal is messed\nup, try the \u201creset\u201d command.",
     "commands": [
       "ls",
       "cd",
@@ -106,5 +86,408 @@
     ],
     "reading_material": [],
     "url": "https://overthewire.org/wargames/bandit/bandit5.html"
+  },
+  "6": {
+    "level": 6,
+    "goal": "The password for the next level is stored in a file somewhere under\nthe\ninhere\ndirectory and has all of the following properties:\nhuman-readable\n1033 bytes in size\nnot executable",
+    "commands": [
+      "ls",
+      "cd",
+      "cat",
+      "file",
+      "du",
+      "find"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit6.html"
+  },
+  "7": {
+    "level": 7,
+    "goal": "The password for the next level is stored\nsomewhere on the\nserver\nand has all of the following properties:\nowned by user bandit7\nowned by group bandit6\n33 bytes in size",
+    "commands": [
+      "ls",
+      "cd",
+      "cat",
+      "file",
+      "du",
+      "find",
+      "grep"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit7.html"
+  },
+  "8": {
+    "level": 8,
+    "goal": "The password for the next level is stored in the file\ndata.txt\nnext to the word\nmillionth",
+    "commands": [
+      "man",
+      "grep",
+      "sort",
+      "uniq",
+      "strings",
+      "base64",
+      "tr",
+      "tar",
+      "gzip",
+      "bzip2",
+      "xxd"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit8.html"
+  },
+  "9": {
+    "level": 9,
+    "goal": "The password for the next level is stored in the file\ndata.txt\nand is the only line of text that occurs only once",
+    "commands": [
+      "grep",
+      "sort",
+      "uniq",
+      "strings",
+      "base64",
+      "tr",
+      "tar",
+      "gzip",
+      "bzip2",
+      "xxd"
+    ],
+    "reading_material": [
+      "Piping and Redirection"
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit9.html"
+  },
+  "10": {
+    "level": 10,
+    "goal": "The password for the next level is stored in the file\ndata.txt\nin one of the few human-readable strings, preceded by several \u2018=\u2019\ncharacters.",
+    "commands": [
+      "grep",
+      "sort",
+      "uniq",
+      "strings",
+      "base64",
+      "tr",
+      "tar",
+      "gzip",
+      "bzip2",
+      "xxd"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit10.html"
+  },
+  "11": {
+    "level": 11,
+    "goal": "The password for the next level is stored in the file\ndata.txt\n,\nwhich contains base64 encoded data",
+    "commands": [
+      "grep",
+      "sort",
+      "uniq",
+      "strings",
+      "base64",
+      "tr",
+      "tar",
+      "gzip",
+      "bzip2",
+      "xxd"
+    ],
+    "reading_material": [
+      "Base64 on Wikipedia"
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit11.html"
+  },
+  "12": {
+    "level": 12,
+    "goal": "The password for the next level is stored in the file\ndata.txt\n,\nwhere all lowercase (a-z) and uppercase (A-Z) letters have been\nrotated by 13 positions",
+    "commands": [
+      "grep",
+      "sort",
+      "uniq",
+      "strings",
+      "base64",
+      "tr",
+      "tar",
+      "gzip",
+      "bzip2",
+      "xxd"
+    ],
+    "reading_material": [
+      "Rot13 on Wikipedia"
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit12.html"
+  },
+  "13": {
+    "level": 13,
+    "goal": "The password for the next level is stored in the file\ndata.txt\n,\nwhich is a hexdump of a file that has been repeatedly compressed.\nFor this level it may be useful to create a directory under /tmp in\nwhich you can work. Use mkdir with a hard to guess directory name.\nOr better, use the command \u201cmktemp -d\u201d.\nThen copy the datafile using cp, and rename it using mv (read the\nmanpages!)",
+    "commands": [
+      "grep",
+      "sort",
+      "uniq",
+      "strings",
+      "base64",
+      "tr",
+      "tar",
+      "gzip",
+      "bzip2",
+      "xxd",
+      "mkdir",
+      "cp",
+      "mv",
+      "file"
+    ],
+    "reading_material": [
+      "Hex dump on Wikipedia"
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit13.html"
+  },
+  "14": {
+    "level": 14,
+    "goal": "The password for the next level is stored in\n/etc/bandit_pass/bandit14 and can only be read by user\nbandit14\n. For this level, you don\u2019t get the next password, but you\nget a private SSH key that can be used to log into the next level.\nLook at the commands that logged you into previous bandit levels,\nand find out how to use the key for this level.",
+    "commands": [
+      "ssh",
+      "scp",
+      "umask",
+      "chmod",
+      "cat",
+      "nc",
+      "install"
+    ],
+    "reading_material": [
+      "SSH/OpenSSH/Keys"
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit14.html"
+  },
+  "15": {
+    "level": 15,
+    "goal": "The password for the next level can be retrieved by submitting the\npassword of the current level to\nport 30000 on localhost\n.",
+    "commands": [
+      "ssh",
+      "telnet",
+      "nc",
+      "openssl",
+      "s_client",
+      "nmap"
+    ],
+    "reading_material": [
+      "How the Internet works in 5 minutes (YouTube)",
+      "(Not completely",
+      "accurate, but good enough for beginners)",
+      "IP Addresses",
+      "IP Address on Wikipedia",
+      "Localhost on Wikipedia",
+      "Ports",
+      "Port (computer networking) on Wikipedia"
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit15.html"
+  },
+  "16": {
+    "level": 16,
+    "goal": "The password for the next level can be retrieved by submitting the\npassword of the current level to\nport 30001 on localhost\nusing\nSSL/TLS encryption.\nHelpful note: Getting \u201cDONE\u201d, \u201cRENEGOTIATING\u201d or \u201cKEYUPDATE\u201d? Read the\n\u201cCONNECTED COMMANDS\u201d section in the manpage.",
+    "commands": [
+      "ssh",
+      "telnet",
+      "nc",
+      "ncat",
+      "socat",
+      "openssl",
+      "s_client",
+      "nmap",
+      "netstat",
+      "ss"
+    ],
+    "reading_material": [
+      "Secure Socket Layer/Transport Layer Security on Wikipedia",
+      "OpenSSL Cookbook - Testing with OpenSSL"
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit16.html"
+  },
+  "17": {
+    "level": 17,
+    "goal": "The credentials for the next level can be retrieved by submitting the\npassword of the current level to\na port on localhost in the range\n31000 to 32000\n. First find out which of these ports have a server\nlistening on them. Then find out which of those speak SSL/TLS and which\ndon\u2019t. There is only 1 server that will give the next credentials, the\nothers will simply send back to you whatever you send to it.\nHelpful note: Getting \u201cDONE\u201d, \u201cRENEGOTIATING\u201d or \u201cKEYUPDATE\u201d? Read the\n\u201cCONNECTED COMMANDS\u201d section in the manpage.",
+    "commands": [
+      "ssh",
+      "telnet",
+      "nc",
+      "ncat",
+      "socat",
+      "openssl",
+      "s_client",
+      "nmap",
+      "netstat",
+      "ss"
+    ],
+    "reading_material": [
+      "Port scanner on Wikipedia"
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit17.html"
+  },
+  "18": {
+    "level": 18,
+    "goal": "There are 2 files in the homedirectory:\npasswords.old and\npasswords.new\n. The password for the next level is in\npasswords.new\nand is the only line that has been changed between\npasswords.old and passwords.new\nNOTE: if you have solved this level and see \u2018Byebye!\u2019 when trying\nto log into bandit18, this is related to the next level, bandit19",
+    "commands": [
+      "cat",
+      "grep",
+      "ls",
+      "diff"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit18.html"
+  },
+  "19": {
+    "level": 19,
+    "goal": "The password for the next level is stored in a file\nreadme\nin\nthe homedirectory. Unfortunately, someone has modified\n.bashrc\nto log you out when you log in with SSH.",
+    "commands": [
+      "ssh",
+      "ls",
+      "cat"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit19.html"
+  },
+  "20": {
+    "level": 20,
+    "goal": "To gain access to the next level, you should use the setuid binary\nin the homedirectory. Execute it without arguments to find out how\nto use it. The password for this level can be found in the usual\nplace (/etc/bandit_pass), after you have used the setuid binary.",
+    "commands": [],
+    "reading_material": [
+      "setuid on Wikipedia"
+    ],
+    "url": "https://overthewire.org/wargames/bandit/bandit20.html"
+  },
+  "21": {
+    "level": 21,
+    "goal": "There is a setuid binary in the homedirectory that does the\nfollowing: it makes a connection to localhost on the port you\nspecify as a commandline argument. It then reads a line of text from\nthe connection and compares it to the password in the previous level\n(bandit20). If the password is correct, it will transmit the\npassword for the next level (bandit21).\nNOTE:\nTry connecting to your own network daemon to see if it\nworks as you think",
+    "commands": [
+      "ssh",
+      "nc",
+      "cat",
+      "bash",
+      "screen",
+      "tmux",
+      "Unix \u2018job control\u2019 (bg",
+      "fg",
+      "jobs",
+      "&",
+      "CTRL-Z",
+      "\u2026)"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit21.html"
+  },
+  "22": {
+    "level": 22,
+    "goal": "A program is running automatically at regular intervals from\ncron\n, the time-based job scheduler. Look in\n/etc/cron.d/\nfor\nthe configuration and see what command is being executed.",
+    "commands": [
+      "cron",
+      "crontab",
+      "crontab(5) (use \u201cman 5 crontab\u201d to access this)"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit22.html"
+  },
+  "23": {
+    "level": 23,
+    "goal": "A program is running automatically at regular intervals from\ncron\n, the time-based job scheduler. Look in\n/etc/cron.d/\nfor\nthe configuration and see what command is being executed.\nNOTE:\nLooking at shell scripts written by other people is a\nvery useful skill. The script for this level is intentionally made\neasy to read. If you are having problems understanding what it does,\ntry executing it to see the debug information it prints.",
+    "commands": [
+      "cron",
+      "crontab",
+      "crontab(5) (use \u201cman 5 crontab\u201d to access this)"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit23.html"
+  },
+  "24": {
+    "level": 24,
+    "goal": "A program is running automatically at regular intervals from\ncron\n, the time-based job scheduler. Look in\n/etc/cron.d/\nfor\nthe configuration and see what command is being executed.\nNOTE:\nThis level requires you to create your own first\nshell-script. This is a very big step and you should be proud of\nyourself when you beat this level!\nNOTE 2:\nKeep in mind that your shell script is removed once\nexecuted, so you may want to keep a copy around\u2026",
+    "commands": [
+      "chmod",
+      "cron",
+      "crontab",
+      "crontab(5) (use \u201cman 5 crontab\u201d to access this)"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit24.html"
+  },
+  "25": {
+    "level": 25,
+    "goal": "A daemon is listening on port 30002 and will give you the password for\nbandit25 if given the password for bandit24 and a secret numeric 4-digit pincode.\nThere is no way to retrieve the pincode except by going through all of the 10000\ncombinations, called brute-forcing.\nYou do not need to create new connections each time",
+    "commands": [],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit25.html"
+  },
+  "26": {
+    "level": 26,
+    "goal": "Logging in to bandit26 from bandit25 should be fairly easy\u2026\nThe shell for user bandit26 is not\n/bin/bash\n, but something else.\nFind out what it is, how it works and how to break out of it.\nNOTE: if you\u2019re a Windows user and typically use Powershell to\nssh\ninto bandit: Powershell is known to cause issues with the\nintended solution to this level. You should use command prompt\ninstead.",
+    "commands": [
+      "ssh",
+      "cat",
+      "more",
+      "vi",
+      "ls",
+      "id",
+      "pwd"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit26.html"
+  },
+  "27": {
+    "level": 27,
+    "goal": "Good job getting a shell! Now hurry and grab the password for bandit27!",
+    "commands": [
+      "ls"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit27.html"
+  },
+  "28": {
+    "level": 28,
+    "goal": "There is a git repository at\nssh://\n[email\u00a0protected]\n/home/bandit27-git/repo\nvia the port\n2220\n. The password for the user\nbandit27-git\nis the same as for the user\nbandit27\n.\nClone the repository and find the password for the next level.",
+    "commands": [
+      "git"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit28.html"
+  },
+  "29": {
+    "level": 29,
+    "goal": "There is a git repository at\nssh://\n[email\u00a0protected]\n/home/bandit28-git/repo\nvia the port\n2220\n. The password for the user\nbandit28-git\nis the same as for the user\nbandit28\n.\nClone the repository and find the password for the next level.",
+    "commands": [
+      "git"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit29.html"
+  },
+  "30": {
+    "level": 30,
+    "goal": "There is a git repository at\nssh://\n[email\u00a0protected]\n/home/bandit29-git/repo\nvia the port\n2220\n. The password for the user\nbandit29-git\nis the same as for the user\nbandit29\n.\nClone the repository and find the password for the next level.",
+    "commands": [
+      "git"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit30.html"
+  },
+  "31": {
+    "level": 31,
+    "goal": "There is a git repository at\nssh://\n[email\u00a0protected]\n/home/bandit30-git/repo\nvia the port\n2220\n. The password for the user\nbandit30-git\nis the same as for the user\nbandit30\n.\nClone the repository and find the password for the next level.",
+    "commands": [
+      "git"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit31.html"
+  },
+  "32": {
+    "level": 32,
+    "goal": "There is a git repository at\nssh://\n[email\u00a0protected]\n/home/bandit31-git/repo\nvia the port\n2220\n. The password for the user\nbandit31-git\nis the same as for the user\nbandit31\n.\nClone the repository and find the password for the next level.",
+    "commands": [
+      "git"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit32.html"
+  },
+  "33": {
+    "level": 33,
+    "goal": "After all this\ngit\nstuff, it\u2019s time for another escape. Good luck!",
+    "commands": [
+      "sh",
+      "man"
+    ],
+    "reading_material": [],
+    "url": "https://overthewire.org/wargames/bandit/bandit33.html"
   }
 }

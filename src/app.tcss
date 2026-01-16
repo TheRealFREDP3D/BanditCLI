@@ -36,10 +36,20 @@ Header {
 }
 
 
+/* Command input container styling */
+#command-input-container {
+    height: auto;
+    margin: 0 0 1 0;
+    padding: 1 0;
+    background: $surface;
+    border-top: solid $secondary;
+    border-bottom: solid $secondary;
+}
+
 /* Command input styling */
 #command_input {
     width: 80%;
-    margin: 1 0 1 1;
+    margin: 0 1 0 1;
     display: block;
     background: $surface;
     color: $text;
@@ -47,9 +57,9 @@ Header {
 }
 
 /* Send button styling */
-#send_button {
+#send_command {
     width: 15%;
-    margin: 1 1 1 0;
+    margin: 0 1 0 0;
     min-width: 20;
 }
 
