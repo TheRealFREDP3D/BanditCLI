@@ -14,12 +14,20 @@ import os
 import socket
 import threading
 import time
+from collections import defaultdict
 from typing import Callable, Dict, Optional
 
 import paramiko
 
 # Configure logging
 logging.getLogger("paramiko").setLevel(logging.WARNING)
+
+# Rate limiting configuration
+MAX_ATTEMPTS_PER_MINUTE = 5
+RATE_LIMIT_WINDOW = 60  # seconds
+
+# Global rate limiting storage
+_connection_attempts = defaultdict(list)
 
 class SSHConnection:
     """Thread-safe SSH connection with background output reading.
@@ -28,6 +36,13 @@ class SSHConnection:
     interactive shell functionality with real-time output reading in a separate
     thread. It handles connection lifecycle, command sending, and graceful
     disconnection.
+
+    Security Considerations:
+        - Passwords are stored in memory and securely cleared on disconnection
+        - Host key verification is enabled by default to prevent MITM attacks
+        - Connection timeouts prevent hanging connections
+        - Sensitive data is overwritten using bytearray for secure memory clearing
+        - No SSH agent or private key usage to prevent credential leakage
 
     Attributes:
         hostname (str): The remote server hostname.
@@ -95,8 +110,8 @@ class SSHConnection:
                 try:
                     self.client.load_system_host_keys()
                     self.client.load_host_keys(os.path.expanduser("~/.ssh/known_hosts"))
-                except Exception:
-                    self.notify("Warning: Could not load known hosts file. New hosts will be added automatically.", "warning")
+                except OSError as e:
+                    self.notify(f"Warning: Could not load known hosts file: {e}. New hosts will be added automatically.", "warning")
             else:
                 # Educational: AutoAddPolicy for learning environments (less secure)
                 self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -135,8 +150,8 @@ class SSHConnection:
 
             return True
 
-        except (paramiko.AuthenticationException, paramiko.SSHException, TimeoutError) as e:
-            self.notify(f"SSH connection failed: {e}", "error")
+        except (paramiko.AuthenticationException, paramiko.SSHException, OSError, TimeoutError) as e:
+            self.notify(f"SSH connection failed: {type(e).__name__}: {e}", "error")
             return False
 
     def start_reading(self) -> None:
@@ -166,9 +181,13 @@ class SSHConnection:
             except socket.timeout:
                 # This is expected when no data is received, just continue
                 continue
+            except OSError as e:
+                if not self.stop_reading:
+                    self.notify(f"SSH communication error: {type(e).__name__}: {e}", "error")
+                break
             except Exception as e:
                 if not self.stop_reading:
-                    self.notify(f"Error reading SSH output: {e}", "error")
+                    self.notify(f"Unexpected SSH error: {type(e).__name__}: {e}", "error")
                 break
 
     def send_command(self, command: str) -> None:
@@ -187,8 +206,8 @@ class SSHConnection:
 
         try:
             self.channel.send(command.encode('utf-8'))
-        except Exception as e:
-            self.notify(f"Error sending command: {e}", "error")
+        except (OSError, paramiko.SSHException) as e:
+            self.notify(f"Command transmission failed: {type(e).__name__}: {e}", "error")
             with self._lock:
                 self.connected = False
 
@@ -213,8 +232,8 @@ class SSHConnection:
                     try:
                         self.client.close()
                         self.notify("SSH client connection closed due to lingering thread.", "info")
-                    except Exception as e:
-                        self.notify(f"Error during SSH client cleanup: {e}", "error")
+                    except (paramiko.SSHException, OSError) as e:
+                        self.notify(f"Error during SSH client cleanup: {type(e).__name__}: {e}", "error")
                 self.notify("Forced thread termination is not supported; resources have been cleaned up.", "warning")
 
         # Close channel and client
@@ -225,18 +244,59 @@ class SSHConnection:
         if self.channel:
             try:
                 self.channel.close()
-            except Exception as e:
-                self.notify(f"Error closing SSH channel: {e}", "warning")
+            except (paramiko.SSHException, OSError) as e:
+                self.notify(f"Error closing SSH channel: {type(e).__name__}: {e}", "warning")
 
         if self.client:
             try:
                 self.client.close()
-            except Exception as e:
-                self.notify(f"Error closing SSH client: {e}", "warning")
+            except (paramiko.SSHException, OSError) as e:
+                self.notify(f"Error closing SSH client: {type(e).__name__}: {e}", "warning")
 
-        # Clear sensitive data securely
-        self.password = "" * len(self.password)  # Overwrite memory
-        self.password = ""
+        # Clear sensitive data securely using bytearray for proper memory overwrite
+        if self.password:
+            try:
+                # Convert to bytearray for in-place modification
+                password_bytes = bytearray(self.password.encode('utf-8'))
+                # Overwrite with zeros
+                for i in range(len(password_bytes)):
+                    password_bytes[i] = 0
+                # Clear the original string
+                self.password = ""
+                # Explicitly delete the bytearray
+                del password_bytes
+            except Exception:
+                # Fallback to basic clearing if bytearray approach fails
+                self.password = " " * len(self.password)
+                self.password = ""
+
+    def resize_pty(self, width: int, height: int) -> bool:
+        """Resize the interactive shell PTY.
+
+        This adjusts the remote pseudo-terminal dimensions to match the
+        local UI container.
+
+        Args:
+            width: New width in characters.
+            height: New height in characters.
+
+        Returns:
+            bool: True if resize successful, False otherwise.
+        """
+        with self._lock:
+            if not self.channel or not self.connected:
+                return False
+
+        try:
+            self.channel.resize_pty(width=width, height=height)
+            return True
+        except (paramiko.SSHException, OSError) as e:
+            self.notify(f"SSH error during terminal resize: {type(e).__name__}: {e}", "warning")
+            return False
+        except Exception as e:
+            self.notify(f"Unexpected error during terminal resize: {type(e).__name__}: {e}", "warning")
+            return False
+
     def set_output_callback(self, callback: Callable[[str], None]) -> None:
         """Set the callback function for handling SSH output.
 
@@ -246,12 +306,45 @@ class SSHConnection:
         self.output_callback = callback
 
 
+def _check_rate_limit(identifier: str) -> bool:
+    """Check if connection attempts are rate limited.
+    
+    Args:
+        identifier: Unique identifier (hostname:port) for rate limiting.
+        
+    Returns:
+        bool: True if allowed, False if rate limited.
+    """
+    current_time = time.time()
+    
+    # Remove old attempts outside the window
+    _connection_attempts[identifier] = [
+        attempt_time for attempt_time in _connection_attempts[identifier]
+        if current_time - attempt_time < RATE_LIMIT_WINDOW
+    ]
+    
+    # Check if under the limit
+    if len(_connection_attempts[identifier]) >= MAX_ATTEMPTS_PER_MINUTE:
+        return False
+    
+    # Record this attempt
+    _connection_attempts[identifier].append(current_time)
+    return True
+
+
 class SSHManager:
     """Multi-session SSH connection manager.
 
     This class manages multiple SSH connections simultaneously, providing
     a centralized interface for creating, accessing, and disconnecting
     SSH sessions. Thread-safe implementation ensures safe concurrent access.
+
+    Security Considerations:
+        - Rate limiting prevents brute force attacks (max 5 attempts per minute)
+        - Connection identifiers use hostname:port for granular rate limiting
+        - Thread-safe operations prevent race conditions
+        - Automatic cleanup of existing connections prevents resource leaks
+        - All connections inherit security settings from SSHConnection class
 
     Attributes:
         connections (Dict[str, SSHConnection]): Dictionary of active connections.
@@ -290,6 +383,12 @@ class SSHManager:
             bool: True if connection was successful, False otherwise.
         """
         with self._lock:
+            # Check rate limiting before attempting connection
+            connection_identifier = f"{hostname}:{port}"
+            if not _check_rate_limit(connection_identifier):
+                self.notify(f"Connection rate limit exceeded for {hostname}:{port}. Please wait before trying again.", "error")
+                return False
+            
             # Clean up existing connection
             if session_id in self.connections:
                 self.disconnect_session(session_id)

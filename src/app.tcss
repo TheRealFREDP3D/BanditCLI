@@ -35,6 +35,22 @@ Header {
     margin: 0 0 1 0;
 }
 
+/* Enhanced terminal output specific styling */
+EnhancedTerminalOutput {
+    height: 1fr;
+    border: solid $secondary;
+    background: $surface;
+    scrollbar-background: $background;
+    scrollbar-color: $primary;
+    margin: 0 0 1 0;
+    padding: 1;
+}
+
+EnhancedTerminalOutput:focus {
+    border: solid $accent;
+    box-shadow: 0 0 8px $accent;
+}
+
 
 /* Command input container styling */
 #command-input-container {

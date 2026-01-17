@@ -2,24 +2,14 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg) ![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg) ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
 
-A terminal-based interface for playing the OverTheWire Bandit wargame, built with Python and the Textual framework. This CLI application provides a simplified interface for playing the challenges, featuring:
-
-- SSH Terminal Interface: Real-time SSH connection to the Bandit server
-- Level Information Display: View level goals, recommended commands, and reading materials
-- AI Mentor System: Get contextual hints and guidance without revealing solutions
-- Command History: Navigate through previously entered commands
-- Session Management: Save and switch between multiple sessions
-- Offline Mode: Access level information and review sessions without internet
-- Caching: Improved performance through intelligent caching of frequently accessed data
+A terminal-based interface for playing OverTheWire Bandit wargame, built with Python and Textual framework. This CLI application provides a simplified interface for playing challenges, featuring:
 
 ## ⚠️ Important Notes
 
 ### Level Availability
-
-⚠️ **Level Data Availability**: Currently, only levels 0-5 (6 out of 34 Bandit levels) have full support with detailed goals, commands, and reading materials. For levels 6-33, the application will display a message directing you to the [official OverTheWire Bandit website](https://overthewire.org/wargames/bandit/).
+⚠️ **Level Data Availability**: Currently, only levels 0-5 (6 out of 34 Bandit levels) have full support with detailed goals, commands, and reading materials. For levels 6-33, application will display a message directing you to the [official OverTheWire Bandit website](https://overthewire.org/wargames/bandit/).
 
 ### Data Privacy
-
 🔒 **Data Privacy Notice**: When using the AI Mentor, your recent commands (last 5) and terminal output (up to 500 characters) are sent to OpenAI's API for context-aware responses. No passwords or sensitive credentials are intentionally sent, but be aware that command history may contain sensitive information. You can disable the AI Mentor by not setting the `OPENAI_API_KEY` environment variable.
 
 ## Features
@@ -316,5 +306,6 @@ We take security seriously in this educational tool. See [SECURITY.md](SECURITY.
 
 - [OverTheWire](https://overthewire.org/) for providing the Bandit wargame
 - [Textual](https://github.com/Textualize/textual) for the terminal user interface framework
-- [OpenAI](https://openai.com/) for AI mentor capabilities 
+- [OpenAI](https://openai.com/) for AI mentor capabilities
+ 
  

@@ -1,12 +1,13 @@
 """Caching utilities for the Bandit CLI application."""
+import hashlib
 import json
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 
 class Cache:
-    """A simple file-based cache with expiration support."""
+    """A simple file-based cache with expiration support and statistics tracking."""
 
     def __init__(self, cache_dir: str = None, default_ttl: int = 3600):
         """
@@ -23,13 +24,37 @@ class Cache:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.default_ttl = default_ttl
+        
+        # Statistics tracking
+        self.stats_file = self.cache_dir / "cache_stats.json"
+        self.stats = self._load_stats()
+        self.stats['hits'] = self.stats.get('hits', 0)
+        self.stats['misses'] = self.stats.get('misses', 0)
+        self.stats['sets'] = self.stats.get('sets', 0)
+        self.stats['clears'] = self.stats.get('clears', 0)
 
+    def _load_stats(self) -> Dict:
+        """Load cache statistics from file."""
+        if self.stats_file.exists():
+            try:
+                with open(self.stats_file) as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {}
+    
+    def _save_stats(self) -> None:
+        """Save cache statistics to file."""
+        try:
+            with open(self.stats_file, 'w') as f:
+                json.dump(self.stats, f)
+        except Exception:
+            pass
+    
     def _get_cache_file_path(self, key: str) -> Path:
         """Get the file path for a cache key."""
         # Sanitize the key to create a valid filename
-        safe_key = "".join(c for c in key if c.isalnum() or c in "-_.").strip()
-        if not safe_key:
-            safe_key = "default"
+        safe_key = "".join(c for c in key if c.isalnum() or c in "-_.").strip() or "default"
         return self.cache_dir / f"{safe_key}.cache"
 
     def get(self, key: str) -> Optional[Any]:
@@ -55,16 +80,22 @@ class Cache:
             # Check if cache is expired
             if time.time() > data.get('expires', 0):
                 cache_file.unlink()
+                self.stats['misses'] += 1
+                self._save_stats()
                 return None
 
+            self.stats['hits'] += 1
+            self._save_stats()
             return data.get('value')
         except Exception:
             # If there's any error reading the cache, remove it
             if cache_file.exists():
                 cache_file.unlink()
+            self.stats['misses'] += 1
+            self._save_stats()
             return None
 
-    def set(self, key: str, value: Any, ttl: int = None):
+    def set(self, key: str, value: Any, ttl: int = None) -> None:
         """
         Set a value in the cache.
 
@@ -88,22 +119,79 @@ class Cache:
             # Save to file
             with open(cache_file, 'w') as f:
                 json.dump(data, f)
+            
+            self.stats['sets'] += 1
+            self._save_stats()
         except Exception as e:
             print(f"Warning: Could not save to cache: {e}")
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all cached items."""
         try:
             for cache_file in self.cache_dir.glob("*.cache"):
                 cache_file.unlink()
+            self.stats['clears'] += 1
+            self._save_stats()
         except Exception as e:
             print(f"Warning: Could not clear cache: {e}")
 
-    def clear_key(self, key: str):
+    def clear_key(self, key: str) -> None:
         """Clear a specific cached item."""
         cache_file = self._get_cache_file_path(key)
         if cache_file.exists():
             cache_file.unlink()
+    
+    def get_stats(self) -> Dict:
+        """Get cache statistics."""
+        total_requests = self.stats['hits'] + self.stats['misses']
+        hit_rate = (self.stats['hits'] / total_requests * 100) if total_requests > 0 else 0
+        
+        return {
+            'hits': self.stats['hits'],
+            'misses': self.stats['misses'],
+            'sets': self.stats['sets'],
+            'clears': self.stats['clears'],
+            'hit_rate_percent': round(hit_rate, 2),
+            'total_requests': total_requests,
+            'cache_size': len(list(self.cache_dir.glob("*.cache")))
+        }
+    
+    def cleanup_expired(self) -> int:
+        """Clean up expired cache entries.
+        
+        Returns:
+            int: Number of expired entries removed.
+        """
+        removed_count = 0
+        try:
+            for cache_file in self.cache_dir.glob("*.cache"):
+                try:
+                    with open(cache_file) as f:
+                        data = json.load(f)
+                    if time.time() > data.get('expires', 0):
+                        cache_file.unlink()
+                        removed_count += 1
+                except Exception:
+                    # Remove corrupted cache files
+                    cache_file.unlink()
+                    removed_count += 1
+        except Exception as e:
+            print(f"Warning: Could not cleanup expired cache: {e}")
+        
+        return removed_count
+    
+    def generate_hash_key(self, level: int, question: str) -> str:
+        """Generate a hash key for AI responses based on level and question.
+        
+        Args:
+            level: The current level number.
+            question: The user's question.
+            
+        Returns:
+            str: A hash key for caching.
+        """
+        content = f"level_{level}_question_{question.lower().strip()}"
+        return hashlib.md5(content.encode()).hexdigest()
 
 
 # Global cache instance

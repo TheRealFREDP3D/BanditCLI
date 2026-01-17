@@ -11,13 +11,21 @@ ensuring users learn concepts rather than receiving direct solutions.
 import importlib.resources
 import json
 import os
-from typing import Callable, Dict, Generator, List, Optional
+from typing import Callable, Dict, Generator, List, Optional, Any
+
+from src.cache import Cache
 
 try:
     import litellm
     LITELLM_AVAILABLE = True
 except ImportError:
     LITELLM_AVAILABLE = False
+
+# Import ConfigManager for configuration management
+try:
+    from src.config import ConfigManager
+except ImportError:
+    ConfigManager = None
 class BanditAIMentor:
     """AI-powered mentor for Bandit wargame educational guidance.
 
@@ -41,21 +49,23 @@ class BanditAIMentor:
     """
     def __init__(self, notify_callback: Callable[[str, str], None],
                  model: Optional[str] = None, data_file_path: str = "ai_mentor_data.json",
-                 opt_out: bool = False) -> None:
+                 config: Optional['ConfigManager'] = None, opt_out: bool = False) -> None:
         """Initialize AI mentor with notification callback and configuration.
 
         Args:
             notify_callback: Callback for status/error notifications.
-            model: The AI model to use (defaults to OPENAI_MODEL env var or gpt-3.5-turbo).
+            model: The AI model to use (overrides config if provided).
             data_file_path: Path to JSON file containing level hints and command explanations.
-            opt_out: Whether to opt out of AI features (privacy protection).
+            config: ConfigManager instance for accessing configuration settings.
+            opt_out: Whether to opt out of AI features for privacy.
         """
         self.notify = notify_callback
-        self.model: str = model or os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        self.model: str = model or (config.get('ai.model') if config else os.getenv("OPENAI_MODEL", "gpt-3.5-turbo"))
         self.data_file_path: str = data_file_path
         self.level_hints: Dict[str, str] = {}
         self.command_explanations: Dict[str, str] = {}
         self.opt_out = opt_out
+        self.cache = Cache(cache_dir=None, default_ttl=3600)  # 1 hour TTL for AI responses
         self._load_data()
 
         # Check if AI is available and not opted out
@@ -138,11 +148,12 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
     def get_response(self, user_message: str, session_id: str = "default",
                     current_level: int = 0, recent_commands: Optional[List[str]] = None,
                     terminal_output: str = "", stream: bool = True) -> Generator[str, None, None]:
-        """Generate AI mentor response with context awareness.
+        """Generate AI mentor response with context awareness and caching.
 
         Creates an educational response based on the user's message, current level,
         recent commands, and terminal output. Uses streaming for real-time response
-        delivery and maintains conversation history for context.
+        delivery and maintains conversation history for context. Implements caching
+        to improve performance for repeated questions.
 
         **Data Privacy Notice**: The following data may be sent to OpenAI API:
         - User messages and conversation history
@@ -165,13 +176,24 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             If AI is disabled, returns a message indicating the disabled status.
             Handles API errors gracefully with fallback responses.
         """
-        """Generate AI mentor response"""
         # If AI is disabled, return a default message
         if self.disabled:
             if self.opt_out:
                 yield "AI mentor is disabled due to privacy opt-out. You can enable it in settings if you want AI assistance."
             else:
                 yield "AI mentor is currently disabled. Please set your OpenAI API key in the .env file to enable this feature."
+            return
+        
+        # Check cache first
+        cache_key = self.cache.generate_hash_key(current_level, user_message)
+        cached_response = self.cache.get(cache_key)
+        if cached_response is not None:
+            self.notify("AI response loaded from cache", severity="info")
+            if stream:
+                for char in cached_response:
+                    yield char
+            else:
+                yield cached_response
             return
 
         try:
@@ -212,7 +234,7 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
 
             # Generate response with error handling
             try:
-                stream = litellm.completion(
+                stream_response = litellm.completion(
                     model=self.model,
                     messages=messages,
                     max_tokens=500,
@@ -222,11 +244,14 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
                 )
 
                 full_response = ""
-                for chunk in stream:
+                for chunk in stream_response:
                     content = chunk.choices[0].delta.content or ""
                     if content:  # Only yield non-empty content
                         full_response += content
                         yield content
+
+                # Cache the complete response
+                self.cache.set(cache_key, full_response, ttl=3600)  # Cache for 1 hour
 
                 # Update conversation history
                 self.conversation_history[session_id].extend([
@@ -237,13 +262,22 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
                 # Trim conversation history to prevent unbounded growth
                 self._trim_conversation_history(session_id)
 
+                # Update response quality tracking
+                self.response_quality['total_responses'] += 1
+                self.response_quality['successful_responses'] += 1
+
             except Exception as api_error:
                 self.notify(f"AI API Error: {api_error}", "error")
                 yield "I'm sorry, there was an error with the AI service. Please try again later."
 
+                # Update response quality tracking
+                self.response_quality['total_responses'] += 1
+                self.response_quality['failed_responses'] += 1
+
         except Exception as e:
             self.notify(f"Error generating AI response: {e}", "error")
             yield "I'm sorry, I'm having trouble responding right now. Please try again later."
+
     def clear_conversation(self, session_id: str = "default") -> None:
         """Clear conversation history for a specific session.
 
@@ -285,5 +319,209 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             str: Educational explanation of the command, or a general suggestion
             to check the manual page if no specific explanation is available.
         """
-        return self.command_explanations.get(command.lower(),
-            f"'{command}' is a Linux command. Try 'man {command}' to learn more about it.")
+        return self.command_explanations.get(command,
+            f"For information about '{command}', try using 'man {command}' or '{command} --help' to learn about its usage and options.")
+    def clear_cache(self) -> None:
+        """Clear all AI mentor cache entries."""
+        self.cache.clear()
+        self.notify("AI mentor cache cleared", severity="info")
+    
+    def get_context_suggestions(self, terminal_output: str, recent_commands: List[str]) -> List[str]:
+        """Generate context-aware suggestions based on terminal errors.
+        
+        Args:
+            terminal_output: Recent terminal output to analyze
+            recent_commands: List of recent commands
+            
+        Returns:
+            List[str]: Context-aware suggestions
+        """
+        suggestions = []
+        
+        # Check for common error patterns
+        error_patterns = {
+            r'command not found': 'Try checking command spelling or use `which` to verify path',
+            r'permission denied': 'Consider using `sudo` or check file permissions with `ls -la`',
+            r'no such file': 'Verify file path exists with `ls` or use `find` to locate',
+            r'connection refused': 'Check if service is running and port is accessible',
+            r'authentication failed': 'Verify credentials or check SSH key permissions'
+        }
+        
+        for pattern, suggestion in error_patterns.items():
+            if pattern.lower() in terminal_output.lower():
+                suggestions.append(suggestion)
+        
+        return suggestions
+    
+    def get_cache_stats(self) -> Dict:
+        """Get AI mentor cache statistics."""
+        return self.cache.get_stats()
+    
+    def get_response_with_context(self, level: int, question: str, terminal_output: str = "", recent_commands: List[str] = None) -> str:
+        """Get AI response with context-aware suggestions.
+        
+        Args:
+            level: Current Bandit level
+            question: User's question
+            terminal_output: Recent terminal output for context
+            recent_commands: List of recent commands
+            
+        Returns:
+            str: AI response with context suggestions
+        """
+        # Get base response
+        response = self.get_response(level, question)
+        
+        # Add context suggestions if terminal output is provided
+        if terminal_output and recent_commands is not None:
+            suggestions = self.get_context_suggestions(terminal_output, recent_commands)
+            if suggestions:
+                response += "\n\n**Context-Aware Suggestions:**\n"
+                for suggestion in suggestions:
+                    response += f"- {suggestion}\n"
+        
+        return response
+    
+    def get_response_quality_stats(self) -> Dict:
+        """Get response quality statistics.
+        
+        Returns:
+            Dict: Quality metrics including success rate and response times
+        """
+        total = self.response_quality['total_responses']
+        if total == 0:
+            return {
+                'success_rate': 0.0,
+                'total_responses': 0,
+                'successful_responses': 0,
+                'failed_responses': 0,
+                'avg_response_time': 0.0
+            }
+        
+        success_rate = (self.response_quality['successful_responses'] / total) * 100
+        
+        return {
+            'success_rate': round(success_rate, 2),
+            'total_responses': total,
+            'successful_responses': self.response_quality['successful_responses'],
+            'failed_responses': self.response_quality['failed_responses'],
+            'avg_response_time': self.response_quality['avg_response_time']
+        }
+    
+    def get_enhanced_response_with_quality(self, level: int, question: str, terminal_output: str = "", recent_commands: List[str] = None) -> Dict[str, Any]:
+        """Get AI response with quality indicators.
+        
+        Args:
+            level: Current Bandit level
+            question: User's question
+            terminal_output: Recent terminal output for context
+            recent_commands: List of recent commands
+            
+        Returns:
+            Dict: Response with quality metrics
+        """
+        import time
+        start_time = time.time()
+        
+        try:
+            # Get base response
+            response = self.get_response(level, question)
+            
+            # Calculate response time
+            response_time = time.time() - start_time
+            
+            # Determine confidence based on response characteristics
+            confidence = self._calculate_confidence(response, question)
+            
+            # Determine relevance based on context matching
+            relevance = self._calculate_relevance(response, level, question)
+            
+            # Add context suggestions if terminal output is provided
+            if terminal_output and recent_commands is not None:
+                suggestions = self.get_context_suggestions(terminal_output, recent_commands)
+                if suggestions:
+                    response += "\n\n**Context-Aware Suggestions:**\n"
+                    for suggestion in suggestions:
+                        response += f"- {suggestion}\n"
+            
+            return {
+                'response': response,
+                'confidence': confidence,
+                'relevance': relevance,
+                'response_time': round(response_time, 2),
+                'has_context_suggestions': bool(terminal_output and recent_commands)
+            }
+            
+        except Exception as e:
+            return {
+                'response': f"Error generating response: {e}",
+                'confidence': 0.0,
+                'relevance': 0.0,
+                'response_time': 0.0,
+                'has_context_suggestions': False,
+                'error': str(e)
+            }
+    
+    def _calculate_confidence(self, response: str, question: str) -> float:
+        """Calculate confidence score for AI response.
+        
+        Args:
+            response: The AI response
+            question: The original question
+            
+        Returns:
+            float: Confidence score (0.0 to 1.0)
+        """
+        if not response or not question:
+            return 0.0
+        
+        # Basic confidence metrics
+        response_length = len(response)
+        question_length = len(question)
+        
+        # Response should be substantial but not too long
+        length_score = 0.0
+        if 50 <= response_length <= 1000:
+            length_score = 1.0
+        elif response_length < 50:
+            length_score = 0.3
+        else:
+            length_score = 0.7
+        
+        # Check for educational content indicators
+        educational_keywords = ['explain', 'learn', 'understand', 'concept', 'command', 'hint', 'suggest']
+        educational_score = sum(1 for keyword in educational_keywords if keyword in response.lower()) / len(educational_keywords)
+        
+        # Avoid direct solution indicators
+        solution_keywords = ['password', 'answer', 'solution', 'exact command']
+        solution_penalty = sum(1 for keyword in solution_keywords if keyword in response.lower()) / len(solution_keywords)
+        
+        # Calculate final confidence
+        confidence = (length_score * 0.4) + (educational_score * 0.4) - (solution_penalty * 0.2)
+        return max(0.0, min(1.0, confidence))
+    
+    def _calculate_relevance(self, response: str, level: int, question: str) -> float:
+        """Calculate relevance score for AI response.
+        
+        Args:
+            response: The AI response
+            level: Current Bandit level
+            question: The original question
+            
+        Returns:
+            float: Relevance score (0.0 to 1.0)
+        """
+        if not response:
+            return 0.0
+        
+        # Check if response mentions relevant concepts
+        level_relevance = 1.0 if f"level {level}" in response.lower() or f"bandit {level}" in response.lower() else 0.5
+        
+        # Check if response addresses the question topic
+        question_words = set(question.lower().split())
+        response_words = set(response.lower().split())
+        word_overlap = len(question_words.intersection(response_words)) / max(len(question_words), 1)
+        
+        # Calculate final relevance
+        relevance = (level_relevance * 0.6) + (word_overlap * 0.4)
+        return max(0.0, min(1.0, relevance))

@@ -93,7 +93,7 @@ class ConfigManager:
                 merged[key] = value
         return merged
 
-    def save_config(self):
+    def save_config(self) -> None:
         """Save current configuration to file."""
         try:
             # Create directory if it doesn't exist
@@ -125,7 +125,7 @@ class ConfigManager:
         except (KeyError, TypeError):
             return default
 
-    def set(self, key_path: str, value: Any):
+    def set(self, key_path: str, value: Any) -> None:
         """
         Set a configuration value using dot notation.
 
@@ -148,7 +148,7 @@ class ConfigManager:
         # Save to file
         self.save_config()
 
-    def reset_to_default(self):
+    def reset_to_default(self) -> None:
         """Reset configuration to default values."""
         self.config = copy.deepcopy(self.default_config)
         self.save_config()

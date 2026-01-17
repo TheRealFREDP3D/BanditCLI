@@ -12,6 +12,8 @@ import json
 import os
 from typing import Callable, Dict, List, Optional
 
+from src.cache import Cache
+
 
 class BanditLevelInfo:
     """Manager for Bandit level information and educational content.
@@ -35,6 +37,7 @@ class BanditLevelInfo:
         """
         self.levels_file_path = levels_file_path
         self.notify = notify_callback or self._default_notify
+        self.cache = Cache(cache_dir=None, default_ttl=7200)  # 2 hours TTL for level data
         self.levels_data = self._load_levels_data()
 
     def _default_notify(self, message: str, severity: str = "info") -> None:
@@ -47,15 +50,29 @@ class BanditLevelInfo:
         print(f"[{severity.upper()}] {message}")
 
     def _load_levels_data(self) -> Dict:
-        """Load level data from JSON file with comprehensive error handling.
+        """Load level data from JSON file with comprehensive error handling and caching.
 
-        Attempts to load level data from the specified JSON file, first trying
-        to load from the src package resources, then falling back to a relative
+        Attempts to load level data from cache first, then from the specified JSON file,
+        first trying to load from the src package resources, then falling back to a relative
         path. If both fail, uses fallback data to ensure basic functionality.
 
         Returns:
             Dict: Loaded level data or fallback data if loading fails.
         """
+        # Try to load from cache first
+        cache_key = f"levels_data_{self.levels_file_path}"
+        cached_data = self.cache.get(cache_key)
+        if cached_data is not None:
+            self.notify("Loaded level data from cache", severity="info")
+            return cached_data
+        
+        # Load from file and cache the result
+        data = self._load_levels_data_from_file()
+        self.cache.set(cache_key, data, ttl=7200)  # Cache for 2 hours
+        return data
+    
+    def _load_levels_data_from_file(self) -> Dict:
+        """Load level data from file without caching (internal method)."""
         try:
             # Try to load from the src package first
             with importlib.resources.open_text("src", self.levels_file_path) as f:
@@ -98,7 +115,7 @@ class BanditLevelInfo:
             }
         }
     def get_level_info(self, level_num: int) -> Optional[Dict]:
-        """Get complete information for a specific level.
+        """Get complete information for a specific level with caching.
 
         Args:
             level_num: The level number to retrieve information for.
@@ -106,8 +123,18 @@ class BanditLevelInfo:
         Returns:
             Optional[Dict]: Level information dictionary, or None if not found.
         """
+        cache_key = f"level_info_{level_num}"
+        cached_info = self.cache.get(cache_key)
+        if cached_info is not None:
+            return cached_info
+        
         level_key = str(level_num)
-        return self.levels_data.get(level_key)
+        level_info = self.levels_data.get(level_key)
+        
+        # Cache the result (even if None, to avoid repeated lookups)
+        self.cache.set(cache_key, level_info, ttl=3600)  # Cache for 1 hour
+        
+        return level_info
 
     def get_all_levels(self) -> Dict:
         """Get information for all available levels.
@@ -168,11 +195,12 @@ class BanditLevelInfo:
         return []
 
     def format_level_info(self, level_num: int) -> str:
-        """Format level information as a readable markdown string.
+        """Format level information as a readable markdown string with caching.
 
         Creates a formatted markdown representation of level information including
         title, goal, recommended commands, reading materials, and official level URL.
         Handles missing levels gracefully by showing available alternatives.
+        Uses caching to improve performance for repeated access.
 
         Args:
             level_num: The level number to format information for.
@@ -180,10 +208,15 @@ class BanditLevelInfo:
         Returns:
             str: Formatted markdown string of level information.
         """
+        cache_key = f"formatted_level_info_{level_num}"
+        cached_formatted = self.cache.get(cache_key)
+        if cached_formatted is not None:
+            return cached_formatted
+        
         level_info = self.get_level_info(level_num)
         if not level_info:
             available_levels = self.get_available_levels()
-            return f"""# Level {level_num} - Not Available
+            formatted_info = f"""# Level {level_num} - Not Available
 
 Level {level_num} information is not available.
 
@@ -191,7 +224,16 @@ Available levels: {', '.join(map(str, available_levels))}
 
 If you're working on a level beyond our data, refer to:
 https://overthewire.org/wargames/bandit/"""
-
+        else:
+            formatted_info = self._format_level_info_from_data(level_num, level_info)
+        
+        # Cache the formatted result
+        self.cache.set(cache_key, formatted_info, ttl=1800)  # Cache for 30 minutes
+        
+        return formatted_info
+    
+    def _format_level_info_from_data(self, level_num: int, level_info: Dict) -> str:
+        """Format level information from data dictionary (internal method)."""
         formatted_info = f"# Bandit Level {level_num}"
 
         # Add title if available
@@ -269,4 +311,15 @@ https://overthewire.org/wargames/bandit/"""
             if any(query_lower in cmd.lower() for cmd in commands):
                 matching_levels.append(level_num)
 
-        return sorted(matching_levels)
+    def clear_cache(self) -> None:
+        """Clear all level-related cache entries."""
+        # Clear level data cache
+        self.cache.clear_key(f"levels_data_{self.levels_file_path}")
+        
+        # Clear individual level caches
+        available_levels = self.get_available_levels()
+        for level in available_levels:
+            self.cache.clear_key(f"level_info_{level}")
+            self.cache.clear_key(f"formatted_level_info_{level}")
+        
+        self.notify("Level cache cleared", severity="info")
