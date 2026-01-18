@@ -1,5 +1,7 @@
 # Bandit Wargame CLI
 
+![Header](docs/banner.jpg)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg) ![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg) ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
 
 A terminal-based interface for playing OverTheWire Bandit wargame, built with Python and Textual framework. This CLI application provides a simplified interface for playing challenges, featuring:
@@ -172,11 +174,20 @@ bandit-cli-app/
 │   ├── session_manager.py   # Session management
 │   ├── cache.py             # Caching utilities
 │   ├── config.py            # Configuration management
+│   ├── terminal_output.py   # Terminal output handling
 │   ├── app.tcss             # CSS styling for the application
+│   ├── ai_mentor_data.json # AI mentor configuration data
 │   └── bandit_levels.json   # Level data scraped from OverTheWire
+├── tests/                   # Test suite
+├── docs/                    # Documentation
 ├── requirements.txt         # Python dependencies
+├── requirements-dev.txt     # Development dependencies
+├── pyproject.toml          # Project configuration
+├── ruff.toml              # Linting configuration
 ├── README.md               # This file
-└── .env                    # Environment variables (not included in repo)
+├── LICENSE                 # MIT License
+├── SECURITY.md            # Security documentation
+└── CONTRIBUTING.md        # Contributing guidelines
 ```
 
 ## Technology Stack

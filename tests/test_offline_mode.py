@@ -1,12 +1,13 @@
 """Unit tests for offline mode functionality."""
+
 import os
 import sys
 from unittest.mock import Mock, patch
 
 # Add the src directory to the path so we can import the modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from src.main import BanditCLIApp
+from main import BanditCLIApp
 
 
 class TestOfflineMode:
@@ -73,7 +74,7 @@ class TestOfflineMode:
         app.offline_mode = True
 
         # Mock the query_one method to return inputs
-        with patch.object(app, 'query_one') as mock_query:
+        with patch.object(app, "query_one") as mock_query:
             # Mock mentor input with a message
             mock_mentor_input = Mock()
             mock_mentor_input.value = "Test message"

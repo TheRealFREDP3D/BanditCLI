@@ -7,9 +7,11 @@ JSON files, with fallback data handling for missing files.
 The BanditLevelInfo class is the main interface for accessing level information,
 including goals, recommended commands, and reading materials.
 """
+
 import importlib.resources
 import json
 import os
+import threading
 from typing import Callable, Dict, List, Optional
 
 from src.cache import Cache
@@ -27,8 +29,12 @@ class BanditLevelInfo:
         notify (Callable[[str, str], None]): Callback for status notifications.
         levels_data (Dict): Loaded level data dictionary.
     """
-    def __init__(self, levels_file_path: str = "bandit_levels.json",
-                 notify_callback: Optional[Callable[[str, str], None]] = None) -> None:
+
+    def __init__(
+        self,
+        levels_file_path: str = "bandit_levels.json",
+        notify_callback: Optional[Callable[[str, str], None]] = None,
+    ) -> None:
         """Initialize level info manager with file path and notification callback.
 
         Args:
@@ -38,7 +44,9 @@ class BanditLevelInfo:
         self.levels_file_path = levels_file_path
         self.notify = notify_callback or self._default_notify
         self.cache = Cache(cache_dir=None, default_ttl=7200)  # 2 hours TTL for level data
-        self.levels_data = self._load_levels_data()
+        # Lazy loading - don't load all data at startup
+        self._levels_data: Optional[Dict] = None
+        self._load_lock = threading.Lock()
 
     def _default_notify(self, message: str, severity: str = "info") -> None:
         """Default notification handler that prints messages to console.
@@ -49,42 +57,48 @@ class BanditLevelInfo:
         """
         print(f"[{severity.upper()}] {message}")
 
-    def _load_levels_data(self) -> Dict:
-        """Load level data from JSON file with comprehensive error handling and caching.
-
-        Attempts to load level data from cache first, then from the specified JSON file,
-        first trying to load from the src package resources, then falling back to a relative
-        path. If both fail, uses fallback data to ensure basic functionality.
+    @property
+    def levels_data(self) -> Dict:
+        """Lazy-loaded property for level data.
 
         Returns:
-            Dict: Loaded level data or fallback data if loading fails.
+            Dict: Loaded level data dictionary.
         """
+        if self._levels_data is None:
+            with self._load_lock:
+                if self._levels_data is None:  # Double-check pattern
+                    self._levels_data = self._load_levels_data()
+        return self._levels_data or {}
+
+    def _load_levels_data(self) -> Dict:
         # Try to load from cache first
         cache_key = f"levels_data_{self.levels_file_path}"
         cached_data = self.cache.get(cache_key)
         if cached_data is not None:
             self.notify("Loaded level data from cache", severity="info")
             return cached_data
-        
+
         # Load from file and cache the result
         data = self._load_levels_data_from_file()
         self.cache.set(cache_key, data, ttl=7200)  # Cache for 2 hours
         return data
-    
+
     def _load_levels_data_from_file(self) -> Dict:
         """Load level data from file without caching (internal method)."""
         try:
             # Try to load from the src package first
             with importlib.resources.open_text("src", self.levels_file_path) as f:
                 data = json.load(f)
-                self.notify(f"Loaded {len(data)} levels from {self.levels_file_path}", severity="info")
+                self.notify(
+                    f"Loaded {len(data)} levels from {self.levels_file_path}", severity="info"
+                )
                 return data
         except (FileNotFoundError, AttributeError):
             # Fallback to relative path
             try:
                 current_dir = os.path.dirname(os.path.abspath(__file__))
                 file_path = os.path.join(current_dir, self.levels_file_path)
-                with open(file_path, encoding='utf-8') as f:
+                with open(file_path, encoding="utf-8") as f:
                     data = json.load(f)
                     self.notify(f"Loaded {len(data)} levels from fallback path", severity="info")
                     return data
@@ -111,9 +125,10 @@ class BanditLevelInfo:
                 "goal": "Connect to bandit.labs.overthewire.org on port 2220 using SSH.\nUsername: bandit0, Password: bandit0",
                 "commands": ["ssh"],
                 "reading_material": [],
-                "url": "https://overthewire.org/wargames/bandit/bandit0.html"
+                "url": "https://overthewire.org/wargames/bandit/bandit0.html",
             }
         }
+
     def get_level_info(self, level_num: int) -> Optional[Dict]:
         """Get complete information for a specific level with caching.
 
@@ -127,13 +142,13 @@ class BanditLevelInfo:
         cached_info = self.cache.get(cache_key)
         if cached_info is not None:
             return cached_info
-        
+
         level_key = str(level_num)
         level_info = self.levels_data.get(level_key)
-        
+
         # Cache the result (even if None, to avoid repeated lookups)
         self.cache.set(cache_key, level_info, ttl=3600)  # Cache for 1 hour
-        
+
         return level_info
 
     def get_all_levels(self) -> Dict:
@@ -212,7 +227,7 @@ class BanditLevelInfo:
         cached_formatted = self.cache.get(cache_key)
         if cached_formatted is not None:
             return cached_formatted
-        
+
         level_info = self.get_level_info(level_num)
         if not level_info:
             available_levels = self.get_available_levels()
@@ -226,12 +241,12 @@ If you're working on a level beyond our data, refer to:
 https://overthewire.org/wargames/bandit/"""
         else:
             formatted_info = self._format_level_info_from_data(level_num, level_info)
-        
+
         # Cache the formatted result
         self.cache.set(cache_key, formatted_info, ttl=1800)  # Cache for 30 minutes
-        
+
         return formatted_info
-    
+
     def _format_level_info_from_data(self, level_num: int, level_info: Dict) -> str:
         """Format level information from data dictionary (internal method)."""
         formatted_info = f"# Bandit Level {level_num}"
@@ -315,11 +330,11 @@ https://overthewire.org/wargames/bandit/"""
         """Clear all level-related cache entries."""
         # Clear level data cache
         self.cache.clear_key(f"levels_data_{self.levels_file_path}")
-        
+
         # Clear individual level caches
         available_levels = self.get_available_levels()
         for level in available_levels:
             self.cache.clear_key(f"level_info_{level}")
             self.cache.clear_key(f"formatted_level_info_{level}")
-        
+
         self.notify("Level cache cleared", severity="info")

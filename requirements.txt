@@ -21,3 +21,6 @@ requests==2.32.4
 
 # Environment variable management
 python-dotenv==1.0.1
+
+# System monitoring for performance tracking
+psutil==6.1.0

@@ -48,7 +48,6 @@ EnhancedTerminalOutput {
 
 EnhancedTerminalOutput:focus {
     border: solid $accent;
-    box-shadow: 0 0 8px $accent;
 }
 
 

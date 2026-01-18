@@ -1,10 +1,11 @@
 """Unit tests for caching in level info and AI mentor modules."""
+
 import os
 import sys
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 # Add the src directory to the path so we can import the modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from ai_mentor import BanditAIMentor
 from level_info import BanditLevelInfo
@@ -18,14 +19,14 @@ class TestCachedLevelInfo:
         # Create a BanditLevelInfo instance with test data
         levels_data = {
             "0": {"level": 0, "goal": "Test goal", "commands": ["ls", "cat"]},
-            "1": {"level": 1, "goal": "Another goal", "commands": ["pwd", "cd"]}
+            "1": {"level": 1, "goal": "Another goal", "commands": ["pwd", "cd"]},
         }
 
-        level_info = BanditLevelInfo()
-        level_info.levels_data = levels_data
+        level_info = BanditLevelInfo(notify_callback=Mock())
+        level_info._levels_data = levels_data
 
         # Mock the cache to track calls
-        with patch('level_info.cache') as mock_cache:
+        with patch.object(level_info, "cache") as mock_cache:
             mock_cache.get.return_value = None  # Not in cache initially
 
             # Call get_level_info
@@ -53,11 +54,11 @@ class TestCachedLevelInfo:
             "0": {"level": 0, "goal": "Test goal", "commands": ["ls", "cat"]},
         }
 
-        level_info = BanditLevelInfo()
-        level_info.levels_data = levels_data
+        level_info = BanditLevelInfo(notify_callback=Mock())
+        level_info._levels_data = levels_data
 
         # Mock the cache to track calls
-        with patch('level_info.cache') as mock_cache:
+        with patch.object(level_info, "cache") as mock_cache:
             mock_cache.get.return_value = None  # Not in cache initially
 
             # Call format_level_info
@@ -86,10 +87,11 @@ class TestCachedAIMentor:
 
     def test_get_level_hint_uses_cache(self):
         """Test that get_level_hint uses caching."""
-        ai_mentor = BanditAIMentor()
+        mock_notify = Mock()
+        ai_mentor = BanditAIMentor(notify_callback=mock_notify)
 
         # Mock the cache to track calls
-        with patch('ai_mentor.cache') as mock_cache:
+        with patch.object(ai_mentor, "cache") as mock_cache:
             mock_cache.get.return_value = None  # Not in cache initially
 
             # Call get_level_hint
@@ -112,10 +114,11 @@ class TestCachedAIMentor:
 
     def test_explain_command_uses_cache(self):
         """Test that explain_command uses caching."""
-        ai_mentor = BanditAIMentor()
+        mock_notify = Mock()
+        ai_mentor = BanditAIMentor(notify_callback=mock_notify)
 
         # Mock the cache to track calls
-        with patch('ai_mentor.cache') as mock_cache:
+        with patch.object(ai_mentor, "cache") as mock_cache:
             mock_cache.get.return_value = None  # Not in cache initially
 
             # Call explain_command

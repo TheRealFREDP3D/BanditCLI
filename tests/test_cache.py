@@ -1,11 +1,12 @@
 """Unit tests for the caching module."""
+
 import json
 import os
 import sys
 import time
 
 # Add the src directory to the path so we can import the modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from cache import Cache
 
@@ -149,8 +150,8 @@ class TestCache:
         with open(cache_file) as f:
             data = json.load(f)
 
-        assert data['value'] == "test_value"
-        assert 'expires' in data
+        assert data["value"] == "test_value"
+        assert "expires" in data
 
     def test_cache_key_sanitization(self, tmp_path):
         """Test that cache keys are properly sanitized."""
@@ -176,7 +177,7 @@ class TestCache:
             "dict": {"nested": "value"},
             "string": "test",
             "number": 42,
-            "boolean": True
+            "boolean": True,
         }
 
         # Set and get complex data

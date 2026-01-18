@@ -1,10 +1,11 @@
 """Unit tests for the configuration module."""
+
 import json
 import os
 import sys
 
 # Add the src directory to the path so we can import the modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from config import ConfigManager
 
@@ -26,17 +27,9 @@ class TestConfigManager:
         """Test loading configuration from file."""
         # Create a config file with custom values
         config_file = tmp_path / "config.json"
-        custom_config = {
-            "ssh": {
-                "host": "custom.host",
-                "port": 2222
-            },
-            "ui": {
-                "theme": "light"
-            }
-        }
+        custom_config = {"ssh": {"host": "custom.host", "port": 2222}, "ui": {"theme": "light"}}
 
-        with open(config_file, 'w') as f:
+        with open(config_file, "w") as f:
             json.dump(custom_config, f)
 
         # Load config

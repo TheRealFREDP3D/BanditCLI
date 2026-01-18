@@ -7,17 +7,20 @@ AI mentor integration, and level information display.
 The main class is BanditCLIApp, which extends Textual's App class and provides
 three main tabs: Terminal, Level Info, and AI Mentor.
 """
+
 # src/main.py
-import os
-import re
 import asyncio
+import os
 import random
+import re
+import time
 from contextlib import suppress
 from typing import Any
 
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.events import Key
 from textual.reactive import reactive
 from textual.validation import Function, ValidationResult
 from textual.widget import Widget
@@ -33,19 +36,20 @@ from textual.widgets import (
     TabPane,
     TextArea,
 )
-from textual.events import Key
 
 from src import __version__
 from src.ai_mentor import BanditAIMentor
-from src.level_info import BanditLevelInfo
-from src.ssh_manager import SSHManager
-from src.config import ConfigManager
 from src.command_history import CommandHistory
+from src.config import ConfigManager
+from src.level_info import BanditLevelInfo
+from src.performance_monitor import get_performance_monitor, track_performance
 from src.session_manager import SessionManager
+from src.ssh_manager import SSHManager
 from src.terminal_output import EnhancedTerminalOutput
 
 # Load environment variables
 load_dotenv()
+
 
 class ConnectionStatus(Static):
     """A widget to display SSH connection status with visual indicator."""
@@ -63,6 +67,7 @@ class ConnectionStatus(Static):
         else:
             return "[red]●[/red] Disconnected"
 
+
 class VersionFooter(Widget):
     """A custom footer widget that displays version information alongside key bindings."""
 
@@ -71,6 +76,7 @@ class VersionFooter(Widget):
         with Horizontal():
             yield Label(f"v{__version__}", id="version-label")
             yield Footer()
+
 
 def validate_username(value: str) -> ValidationResult:
     """Validate SSH username for security.
@@ -81,21 +87,27 @@ def validate_username(value: str) -> ValidationResult:
     Returns:
         ValidationResult: Success if valid, failure with message if invalid.
     """
+
+    def validate_field(val: str, error_msg: str) -> ValidationResult:
+        return ValidationResult.failure([Function(lambda v: v != val, error_msg)])
+
     if not value:
-        return ValidationResult.failure("Username is required")
+        return validate_field(value, "Username is required")
 
     # Check for dangerous characters that could lead to injection
-    dangerous_chars = [';', '&', '|', '`', '$', '(', ')', '<', '>', '"', "'", '\\']
+    dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", '"', "'", "\\"]
     if any(char in value for char in dangerous_chars):
-        return ValidationResult.failure("Username contains invalid characters")
+        return validate_field(value, "Username contains invalid characters")
 
     # Length check
     if len(value) > 32:
-        return ValidationResult.failure("Username too long (max 32 characters)")
+        return validate_field(value, "Username too long (max 32 characters)")
 
     # Pattern check (allow alphanumeric, underscores, hyphens)
-    if not re.match(r'^[a-zA-Z0-9_-]+$', value):
-        return ValidationResult.failure("Username can only contain letters, numbers, underscores, and hyphens")
+    if not re.match(r"^[a-zA-Z0-9_-]+$", value):
+        return validate_field(
+            value, "Username can only contain letters, numbers, underscores, and hyphens"
+        )
 
     return ValidationResult.success()
 
@@ -151,23 +163,27 @@ class BanditCLIApp(App):
 
     def __init__(self) -> None:
         """Initialize the BanditCLI application.
-        
+
         Sets up the application state, loads configuration, initializes
         managers for SSH, AI mentor, and level information, and configures
         reactive properties for UI state management.
         """
         super().__init__()
-        
+
+        # Initialize performance monitor
+        self.performance_monitor = get_performance_monitor()
+
         # Initialize configuration manager with validation
         self.config = ConfigManager()
-        
+
         # Validate configuration on startup
         self._validate_configuration()
-        
+
         self.current_level = 0
         self.session_id = "default"
         self.recent_commands = []
         self.terminal_output = ""
+        self.max_terminal_output_size = 50000  # Limit to ~50KB of terminal output
         self.offline_mode = False
         self.ssh_manager = SSHManager(notify_callback=self._notify_wrapper)
         self.level_info = BanditLevelInfo(notify_callback=self._notify_wrapper)
@@ -178,38 +194,41 @@ class BanditCLIApp(App):
         self.loading = reactive(False)
         self.ai_generating = reactive(False)
         self.current_input_buffer = ""
-        
+
         # Watch for reactive property changes
-        self.watch(self.ssh_connected, self.watch_ssh_connected)
-        self.watch(self.loading, self.watch_loading)
+        self.watch(self, "ssh_connected", self.watch_ssh_connected)
+        self.watch(self, "loading", self.watch_loading)
 
     def _validate_configuration(self) -> None:
         """Validate configuration settings on startup.
-        
+
         Checks critical configuration values and provides user feedback
         for any invalid or missing settings.
         """
         try:
             # Validate SSH configuration
-            ssh_host = self.config.get('ssh.host')
-            ssh_port = self.config.get('ssh.port')
-            ssh_timeout = self.config.get('ssh.timeout')
-            
+            ssh_host = self.config.get("ssh.host")
+            ssh_port = self.config.get("ssh.port")
+            ssh_timeout = self.config.get("ssh.timeout")
+
             if not ssh_host or not isinstance(ssh_port, int) or not isinstance(ssh_timeout, int):
-                self.notify("Warning: Invalid SSH configuration detected. Using defaults.", severity="warning")
+                self.notify(
+                    "Warning: Invalid SSH configuration detected. Using defaults.",
+                    severity="warning",
+                )
                 # Reset to defaults if invalid
-                self.config.set('ssh.host', 'bandit.labs.overthewire.org')
-                self.config.set('ssh.port', 2220)
-                self.config.set('ssh.timeout', 10)
+                self.config.set("ssh.host", "bandit.labs.overthewire.org")
+                self.config.set("ssh.port", 2220)
+                self.config.set("ssh.timeout", 10)
                 self.config.save_config()
-            
+
             # Validate AI configuration
-            ai_model = self.config.get('ai.model')
+            ai_model = self.config.get("ai.model")
             if not ai_model:
                 self.notify("Warning: No AI model configured. Using default.", severity="warning")
-                self.config.set('ai.model', 'gpt-3.5-turbo')
+                self.config.set("ai.model", "gpt-3.5-turbo")
                 self.config.save_config()
-                
+
         except Exception as e:
             self.notify(f"Configuration validation error: {e}", severity="error")
 
@@ -291,7 +310,7 @@ class BanditCLIApp(App):
                 yield Input(
                     placeholder="bandit0",
                     id="ssh_username",
-                    validators=[Function(validate_username, "Invalid username")]
+                    validators=[Function(validate_username, "Invalid username")],
                 )
                 yield Label("Password:", id="password-label")
                 yield Input(placeholder="bandit0", id="ssh_password", password=True)
@@ -305,7 +324,7 @@ class BanditCLIApp(App):
             yield Button("New Session", id="new_session")
             yield Button("Switch Session", id="switch_session")
             yield Static(id="current_session_display")
-        
+
     def compose_level_view(self) -> ComposeResult:
         """Compose the level information view.
 
@@ -367,32 +386,35 @@ class BanditCLIApp(App):
 
         # Initialize session management
         self._initialize_session()
-        
+
         # Run the welcome animation
         asyncio.create_task(self.run_welcome_animation())
-        
+
         # Warm up cache for frequently accessed levels (0-5)
         asyncio.create_task(self._warm_up_cache())
 
     def on_unmount(self) -> None:
         """Called when the app is about to exit.
-        
+
         Performs cleanup operations including cache cleanup.
         """
         try:
             # Clean up expired cache entries
             level_cleanup = self.level_info.cache.cleanup_expired()
             ai_cleanup = self.ai_mentor.cache.cleanup_expired()
-            
+
             if level_cleanup > 0 or ai_cleanup > 0:
-                self.notify(f"Cleaned up {level_cleanup + ai_cleanup} expired cache entries on exit", severity="info")
+                self.notify(
+                    f"Cleaned up {level_cleanup + ai_cleanup} expired cache entries on exit",
+                    severity="information",
+                )
         except Exception as e:
             # Don't fail the application exit
             self.notify(f"Cache cleanup failed on exit: {e}", severity="warning")
 
     async def _warm_up_cache(self) -> None:
         """Warm up cache for frequently accessed levels (0-5).
-        
+
         Pre-loads level information for the most commonly accessed levels
         to improve performance during user interaction.
         """
@@ -403,7 +425,7 @@ class BanditCLIApp(App):
                 self.level_info.get_level_info(level)
                 # Pre-load formatted level info
                 self.level_info.format_level_info(level)
-            
+
         except Exception as e:
             # Don't fail the application if cache warming fails
             self.notify(f"Cache warming failed: {e}", severity="warning")
@@ -411,7 +433,7 @@ class BanditCLIApp(App):
     async def run_welcome_animation(self) -> None:
         """Displays an animated cyberglitch welcome sequence in the terminal."""
         terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
-        
+
         glitch_chars = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
         boot_messages = [
             " [ SYSTEM ] BANDIT-OS KERNEL LOADING...",
@@ -430,17 +452,18 @@ class BanditCLIApp(App):
         for _ in range(5):
             terminal.append_text(f"INITIALIZING... {get_glitch()}\n", scroll_to_bottom=False)
             await asyncio.sleep(0.05)
-        
+
         terminal.clear()
 
         # Simulated Boot Sequence
         for msg in boot_messages:
-            if self.ssh_connected: return # Abort if user connects early
+            if self.ssh_connected:
+                return  # Abort if user connects early
             terminal.append_text(msg + "\n", scroll_to_bottom=False)
             await asyncio.sleep(0.15)
 
         await asyncio.sleep(0.3)
-        
+
         # Cyber Glitch Line
         glitch_line = " [ CRITICAL ] " + get_glitch() + " STABILITY RESTORED " + get_glitch() + "\n"
         terminal.append_text(glitch_line, scroll_to_bottom=False)
@@ -448,16 +471,18 @@ class BanditCLIApp(App):
 
         # Final Directives Typewriter Message
         final_message = "\nWhen ready, enter username and password to connect to SSH game server. The Level Info tab has more detailed directives if you need help.\n"
-        
+
         for char in final_message:
-            if self.ssh_connected: return
+            if self.ssh_connected:
+                return
             terminal.append_text(char, scroll_to_bottom=False)
             # Speed up for spaces/newlines
             await asyncio.sleep(0.01 if char in " \n" else 0.03)
-        
+
         # Scroll to bottom at the end
         terminal._scroll_to_bottom()
 
+    @track_performance("update_level_info")
     def update_level_info(self) -> None:
         """Update the level information display.
 
@@ -512,11 +537,11 @@ class BanditCLIApp(App):
             elif event.key == "down":
                 self._navigate_history_down()
                 return
-        
+
         # Only handle keyboard input when SSH is connected and we're on the terminal tab
         if not self.ssh_connected:
             return
-            
+
         try:
             # Check if we're on the terminal tab
             tabbed = self.query_one(TabbedContent)
@@ -531,7 +556,7 @@ class BanditCLIApp(App):
             return
 
         # Get the SSH connection and send the key
-        if (connection := self.ssh_manager.get_connection(self.session_id)):
+        if connection := self.ssh_manager.get_connection(self.session_id):
             # Handle special keys
             if event.key == "enter":
                 connection.send_command("\n")
@@ -577,6 +602,7 @@ class BanditCLIApp(App):
         if event.input.id == "mentor_input":
             self.send_mentor_message()
 
+    @track_performance("connect_ssh")
     def connect_ssh(self) -> None:
         """Connect to the SSH server with validation.
 
@@ -603,9 +629,9 @@ class BanditCLIApp(App):
             password = password_input.value or ""
 
             # Use configuration values from ConfigManager
-            hostname = self.config.get('ssh.host', 'bandit.labs.overthewire.org')
-            port = self.config.get('ssh.port', '2220')
-            timeout = self.config.get('ssh.timeout', '10')
+            hostname = self.config.get("ssh.host", "bandit.labs.overthewire.org")
+            port = self.config.get("ssh.port", "2220")
+            timeout = self.config.get("ssh.timeout", "10")
 
             # Check if inputs are valid
             if not username_input.validate(username):
@@ -618,26 +644,31 @@ class BanditCLIApp(App):
 
             # Validate hostname format to prevent injection attacks
             import re
-            hostname_pattern = re.compile(r'^[a-zA-Z0-9.-]+$')
+
+            hostname_pattern = re.compile(r"^[a-zA-Z0-9.-]+$")
             if not hostname or not hostname_pattern.match(hostname):
                 self._handle_error_and_stop_loading("Invalid hostname format")
                 return
-            
+
             # Prevent hostname injection attacks
-            if '..' in hostname or hostname.startswith('.') or hostname.endswith('.'):
+            if ".." in hostname or hostname.startswith(".") or hostname.endswith("."):
                 self._handle_error_and_stop_loading("Invalid hostname: potential injection attempt")
                 return
 
             # Validate port format and range before conversion
-            if not port or not port.isdigit() or int(port) < 1 or int(port) > 65535:
-                self._handle_error_and_stop_loading("Port must be a valid integer between 1 and 65535")
+            port_str = str(port) if not isinstance(port, str) else port
+            if not port_str or not port_str.isdigit() or int(port_str) < 1 or int(port_str) > 65535:
+                self._handle_error_and_stop_loading(
+                    "Port must be a valid integer between 1 and 65535"
+                )
                 return
 
             # Validate timeout format and range
-            if not timeout or not timeout.isdigit():
+            timeout_str = str(timeout) if not isinstance(timeout, str) else timeout
+            if not timeout_str or not timeout_str.isdigit():
                 self._handle_error_and_stop_loading("Timeout must be a valid positive integer")
                 return
-            
+
             timeout_int = int(timeout)
             if timeout_int < 1 or timeout_int > 300:  # Reasonable range: 1 second to 5 minutes
                 self._handle_error_and_stop_loading("Timeout must be between 1 and 300 seconds")
@@ -647,6 +678,8 @@ class BanditCLIApp(App):
             port_int = int(port)
 
             # Attempt to connect with security settings
+            start_time = time.perf_counter()
+
             # Default to secure host key verification for educational tool
             insecure_value = os.getenv("BANDIT_CLI_INSECURE", "").lower()
             verify_host_key = insecure_value not in ("true", "1", "yes")
@@ -658,38 +691,60 @@ class BanditCLIApp(App):
                 username,
                 password,
                 timeout=timeout_int,
-                verify_host_key=verify_host_key
+                verify_host_key=verify_host_key,
             )
+
+            # Track SSH connection performance
+            connection_time_ms = (time.perf_counter() - start_time) * 1000
+            self.performance_monitor.update_ssh_performance(connection_time_ms)
 
             if success:
                 # Update session with connection details
                 self.session_manager.update_session_connection(
                     self.session_id, hostname, port_int, username
                 )
-                
+
                 # Set session as active
                 self.session_manager.set_active_session(self.session_id)
-                
+
                 self.ssh_connected = True
-                self.notify("SSH connection established", severity="success")
+                self.notify("SSH connection established", severity="information")
                 # Set up the output callback
-                if (connection := self.ssh_manager.get_connection(self.session_id)):
+                if connection := self.ssh_manager.get_connection(self.session_id):
                     connection.set_output_callback(self.on_ssh_output)
-                
+
                 # Update session display
                 self.update_session_display()
             else:
-                self.notify("Failed to establish SSH connection. Please check your credentials, network connection, and ensure the Bandit server is accessible.", severity="error")
+                self.notify(
+                    "Failed to establish SSH connection. Please check your credentials, network connection, and ensure the Bandit server is accessible.",
+                    severity="error",
+                )
             self.loading = False
 
         except (ValueError, OSError, ConnectionError, TimeoutError) as e:
-            self.notify(f"Connection error during SSH setup: {e}", severity="error")
+            # Log detailed error information
+            self._log_error(f"SSH connection error: {type(e).__name__}: {e}")
+
+            # Provide user-friendly error message
+            user_message = self._get_user_friendly_error_message(str(e))
+
+            self.notify(user_message, severity="error")
             self.loading = False
         except Exception as e:
+            # Log detailed error information
+            self._log_error(f"Unexpected SSH error: {type(e).__name__}: {e}")
+
+            # Import traceback for detailed logging
             import traceback
+
             error_details = traceback.format_exc()
-            self.notify(f"Unexpected error during SSH connection: {e}", severity="error")
-            self.notify(f"Full error details: {error_details}", severity="error")
+            self._log_error(f"Full traceback: {error_details}")
+
+            # Provide user-friendly error message
+            user_message = self._get_user_friendly_error_message(str(e))
+
+            self.notify(user_message, severity="error")
             self.loading = False
 
     def disconnect_ssh(self) -> None:
@@ -703,21 +758,29 @@ class BanditCLIApp(App):
         self.notify("SSH connection closed", severity="information")
 
     def on_ssh_output(self, data: str) -> None:
-        """Handle SSH output data.
+        """Handle SSH output data with memory optimization.
 
         Appends received SSH output to the enhanced terminal display with ANSI parsing,
         buffering, and auto-scrolling. Also tracks commands in history.
+        Limits terminal_output size to prevent memory issues.
 
         Args:
             data: The output data received from the SSH connection.
         """
         # If this is the first real output after the welcome animation, clear the animation
         if self.terminal_output == "":
-             terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
-             terminal.clear()
-             
+            terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
+            terminal.clear()
+
+        # Add new data and enforce size limit
         self.terminal_output += data
-        
+
+        # Trim terminal_output if it exceeds maximum size
+        if len(self.terminal_output) > self.max_terminal_output_size:
+            # Keep only the most recent data (last 80% of max size)
+            trim_size = int(self.max_terminal_output_size * 0.8)
+            self.terminal_output = self.terminal_output[-trim_size:]
+
         # Use the enhanced terminal output widget
         try:
             terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
@@ -726,79 +789,80 @@ class BanditCLIApp(App):
             # Fallback to regular TextArea if enhanced widget is not available
             terminal_output = self.query_one("#terminal_output", TextArea)
             terminal_output.insert(data)
-        
+
         # Extract commands from output (simple heuristic - lines ending with $ or #)
-        lines = data.split('\n')
+        lines = data.split("\n")
         for line in lines:
             # Look for command prompts and extract commands
-            if ('$ ' in line or '# ' in line) and len(line.strip()) > 2:
+            if ("$ " in line or "# " in line) and len(line.strip()) > 2:
                 # This might be a command output, look for the actual command
                 parts = line.strip().split()
                 if len(parts) > 1:
                     # Assume the first part after prompt is the command
-                    cmd_start = line.find('$ ') if '$ ' in line else line.find('# ')
+                    cmd_start = line.find("$ ") if "$ " in line else line.find("# ")
                     if cmd_start != -1:
-                        cmd = line[cmd_start + 2:].strip()
-                        if cmd and not cmd.startswith('['):  # Skip status messages
+                        cmd = line[cmd_start + 2 :].strip()
+                        if cmd and not cmd.startswith("["):  # Skip status messages
                             self.command_history.add_command(cmd)
                             # Update recent commands list
                             self.recent_commands.append(cmd)
                             if len(self.recent_commands) > 5:
                                 self.recent_commands = self.recent_commands[-5:]
-                            
+
                             # Update session level if we detect level progression
                             self._detect_level_progression(cmd)
 
     def clear_conversation_history(self) -> None:
         """Clear conversation history for current session.
-        
+
         Args:
             None
         """
         if self.session_id in self.ai_mentor.conversation_history:
             del self.ai_mentor.conversation_history[self.session_id]
-            self.notify("Conversation history cleared", severity="info")
-    
+            self.notify("Conversation history cleared", severity="information")
+
     def export_conversation(self) -> None:
         """Export conversation to markdown file.
-        
+
         Creates a markdown file with the conversation history and level information.
         """
         try:
             import os
             from datetime import datetime
-            
+
             if self.session_id not in self.ai_mentor.conversation_history:
                 self.notify("No conversation history to export", severity="warning")
                 return
-            
+
             history = self.ai_mentor.conversation_history[self.session_id]
             if not history:
                 self.notify("Empty conversation history", severity="warning")
                 return
-            
+
             # Create export filename with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"bandit_cli_conversation_{timestamp}.md"
             export_path = os.path.expanduser(f"~/Documents/{filename}")
-            
+
             # Build markdown content
             markdown_content = f"""# Bandit CLI Conversation Export\n\n**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n**Level:** {self.current_level}\n**Session:** {self.session_id}\n\n---\n\n## Conversation History\n\n"""
-            
+
             for i, message in enumerate(history):
-                role = message.get('role', 'unknown').title()
-                content = message.get('content', '')\n                markdown_content += f"""**{i+1}. {role}:** {content}\n\n"""
-            
+                role = message.get("role", "unknown").title()
+                content = message.get("content", "")
+                markdown_content += f"**{i+1}. {role}:** {content}\n\n"
+
             # Write to file
             os.makedirs(os.path.dirname(export_path), exist_ok=True)
-            with open(export_path, 'w', encoding='utf-8') as f:
+            with open(export_path, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
-            
-            self.notify(f"Conversation exported to {export_path}", severity="success")
-            
+
+            self.notify(f"Conversation exported to {export_path}", severity="information")
+
         except Exception as e:
             self.notify(f"Failed to export conversation: {e}", severity="error")
-    
+
     def _handle_mentor_response(self, message: str) -> None:
         """Handle AI mentor response generation.
 
@@ -820,13 +884,15 @@ class BanditCLIApp(App):
                 self.session_id,
                 self.current_level,
                 self.recent_commands,
-                self.terminal_output
+                self.terminal_output,
             )
 
             # Stream response
             for chunk in response_stream:
                 mentor_chat.insert(chunk)
-                mentor_chat.move_cursor((mentor_chat.cursor_row, mentor_chat.cursor_column + len(chunk)))
+                mentor_chat.move_cursor(
+                    (mentor_chat.cursor_row, mentor_chat.cursor_column + len(chunk))
+                )
 
         except Exception as e:
             self.notify(f"Error getting AI response: {e}", severity="error")
@@ -837,6 +903,7 @@ class BanditCLIApp(App):
             self.loading = False
             self.ai_generating = False
 
+    @track_performance("send_mentor_message")
     def send_mentor_message(self) -> None:
         """Send a message to the AI mentor.
 
@@ -870,17 +937,6 @@ class BanditCLIApp(App):
             self.update_level_info()
             self.notify(f"Switched to Level {self.current_level}", severity="information")
 
-    def previous_level(self) -> None:
-        """Go to the previous level.
-
-        Decrements the current level if not already at level 0 and
-        updates the level information display.
-        """
-        if self.current_level > 0:
-            self.current_level -= 1
-            self.update_level_info()
-            self.notify(f"Switched to Level {self.current_level}", severity="information")
-
     def next_level(self) -> None:
         """Go to the next level.
 
@@ -899,8 +955,9 @@ class BanditCLIApp(App):
         """Display cache statistics."""
         level_stats = self.level_info.cache.get_stats()
         ai_stats = self.ai_mentor.get_cache_stats()
-        
-        stats_message = f"""Cache Statistics:
+        perf_metrics = self.performance_monitor.get_metrics()
+
+        stats_message = f"""Cache & Performance Statistics:
 
 Level Info Cache:
 - Hits: {level_stats['hits']}
@@ -914,37 +971,46 @@ AI Mentor Cache:
 - Hit Rate: {ai_stats['hit_rate_percent']}%
 - Cache Size: {ai_stats['cache_size']} items
 
-Press Ctrl+Shift+C to clear all caches."""
-        
-        self.notify(stats_message, severity="info")
-    
+Performance Metrics:
+- Memory Usage: {perf_metrics.memory_usage_mb:.1f} MB
+- SSH Connection Time: {perf_metrics.ssh_connection_time_ms:.2f} ms
+- Cache Hit Rate: {perf_metrics.cache_hit_rate:.1f}%
+- Terminal Lines: {perf_metrics.terminal_output_lines}
+
+Recent Performance Alerts: {len(self.performance_monitor.get_recent_alerts(3))}
+
+Press Ctrl+Shift+C to clear all caches and metrics."""
+
+        self.notify(stats_message, severity="information")
+
     def action_clear_cache(self) -> None:
-        """Clear all caches."""
+        """Clear all caches and performance metrics."""
         self.level_info.clear_cache()
         self.ai_mentor.clear_cache()
-        self.notify("All caches cleared", severity="info")
-    
+        self.performance_monitor.clear_metrics()
+        self.notify("All caches and performance metrics cleared", severity="information")
+
     def action_ask_about_last_output(self) -> None:
         """Ask AI about the last terminal output.
-        
+
         Automatically switches to AI mentor tab and asks about recent terminal output.
         """
         if not self.terminal_output.strip():
             self.notify("No terminal output to analyze", severity="warning")
             return
-        
+
         # Switch to AI mentor tab
-        self.action_switch_tab('mentor')
-        
+        self.action_switch_tab("mentor")
+
         # Get last few lines of terminal output
-        lines = self.terminal_output.strip().split('\n')
-        last_output = '\n'.join(lines[-5:]) if len(lines) > 5 else self.terminal_output.strip()
-        
+        lines = self.terminal_output.strip().split("\n")
+        last_output = "\n".join(lines[-5:]) if len(lines) > 5 else self.terminal_output.strip()
+
         # Auto-populate the mentor input with a context-aware question
         mentor_input = self.query_one("#mentor_input", Input)
         mentor_input.value = f"Can you help me understand this output?\n\n{last_output}"
         mentor_input.focus()
-    
+
     def action_toggle_dark(self) -> None:
         """Toggle dark mode.
 
@@ -1010,7 +1076,7 @@ Press Ctrl+Shift+C to clear all caches."""
                 # Calculate safe dimensions for the PTY
                 new_width = max(20, event.size.width - 2)
                 new_height = max(5, event.size.height - 10)
-                
+
                 # Attempt to resize via the connection manager
                 connection.resize_pty(width=new_width, height=new_height)
             except Exception as e:
@@ -1032,18 +1098,18 @@ Created: {session.created_at.strftime('%Y-%m-%d %H:%M')}
 Last Used: {session.last_used.strftime('%Y-%m-%d %H:%M')}
 Connections: {session.connection_count}
 Active: {session.is_active}"""
-            self.notify(info, severity="info")
+            self.notify(info, severity="information")
         else:
             self.notify("No active session", severity="warning")
-    
+
     def action_new_session(self) -> None:
         """Create a new session."""
         self.create_new_session()
-    
+
     def action_switch_session_dialog(self) -> None:
         """Show session switching dialog."""
         self.show_session_switch_dialog()
-    
+
     def _navigate_history_up(self) -> None:
         """Navigate up through command history."""
         # Get current input from terminal (this would need a command input field)
@@ -1051,93 +1117,110 @@ Active: {session.is_active}"""
         previous_cmd = self.command_history.get_previous()
         if previous_cmd:
             # This would update a command input field
-            self.notify(f"Previous: {previous_cmd}", severity="info")
-    
+            self.notify(f"Previous: {previous_cmd}", severity="information")
+
     def _navigate_history_down(self) -> None:
         """Navigate down through command history."""
         next_cmd = self.command_history.get_next()
         if next_cmd is not None:
             # This would update a command input field
             if next_cmd:
-                self.notify(f"Next: {next_cmd}", severity="info")
+                self.notify(f"Next: {next_cmd}", severity="information")
             else:
-                self.notify("New command", severity="info")
-    
+                self.notify("New command", severity="information")
+
     def create_new_session(self) -> None:
         """Create a new session."""
         try:
             # Get current connection details if available
-            hostname = self.config.get('ssh.host', 'bandit.labs.overthewire.org')
-            port = self.config.get('ssh.port', 2220)
+            hostname = self.config.get("ssh.host", "bandit.labs.overthewire.org")
+            port = self.config.get("ssh.port", 2220)
             username = ""  # Will be set when user connects
-            
+
             # Create new session
             session_id = self.session_manager.create_session(
-                hostname=hostname,
-                port=port,
-                username=username,
-                current_level=self.current_level
+                hostname=hostname, port=port, username=username, current_level=self.current_level
             )
-            
+
             # Switch to new session
             if self.session_manager.set_active_session(session_id):
                 self.session_id = session_id
                 self.update_session_display()
-                self.notify(f"Created new session: {session_id[:8]}...", severity="success")
+                self.notify(f"Created new session: {session_id[:8]}...", severity="information")
             else:
                 self.notify("Failed to switch to new session", severity="error")
-                
+
         except Exception as e:
             self.notify(f"Failed to create session: {e}", severity="error")
-    
+
     def show_session_switch_dialog(self) -> None:
         """Show a dialog to switch sessions."""
         sessions = self.session_manager.list_sessions()
         if not sessions:
             self.notify("No sessions available", severity="warning")
             return
-        
+
         # For now, just show available sessions in a notification
         # In a full implementation, this would show a proper dialog
-        session_list = "\n".join([
-            f"{i+1}. {s.name} ({s.get_display_name()}) - Level {s.current_level}"
-            for i, s in enumerate(sessions[:5])  # Show first 5 sessions
-        ])
-        
-        self.notify(f"Available sessions:\n{session_list}\n\nUse session number to switch", severity="info")
-    
+        session_list = "\n".join(
+            [
+                f"{i+1}. {s.name} ({s.get_display_name()}) - Level {s.current_level}"
+                for i, s in enumerate(sessions[:5])  # Show first 5 sessions
+            ]
+        )
+
+        self.notify(
+            f"Available sessions:\n{session_list}\n\nUse session number to switch",
+            severity="information",
+        )
+
     def update_session_display(self) -> None:
         """Update the session display in the UI."""
         try:
             session = self.session_manager.get_active_session()
             display_widget = self.query_one("#current_session_display", Static)
             if session:
-                display_widget.update(f"{session.get_display_name()} | Level {session.current_level}")
+                display_widget.update(
+                    f"{session.get_display_name()} | Level {session.current_level}"
+                )
             else:
                 display_widget.update("No active session")
         except Exception:
             pass  # Widget might not be ready yet
-    
+
     def _detect_level_progression(self, command: str) -> None:
         """Detect level progression from commands and update session.
-        
+
         Args:
             command: The command that was executed.
         """
         # Simple heuristic to detect level progression
         # Look for commands that might indicate level completion
         level_indicators = [
-            'cat', 'ls', 'cd', 'find', 'grep', 'sort', 'strings',
-            'base64', 'hexdump', 'xxd', 'file', 'tar', 'gzip', 'bzip2'
+            "cat",
+            "ls",
+            "cd",
+            "find",
+            "grep",
+            "sort",
+            "strings",
+            "base64",
+            "hexdump",
+            "xxd",
+            "file",
+            "tar",
+            "gzip",
+            "bzip2",
         ]
-        
+
         # If command contains level indicators and we see success patterns
         if any(indicator in command for indicator in level_indicators):
             # Look for potential level progression in recent output
-            if 'bandit' in self.terminal_output.lower():
+            if "bandit" in self.terminal_output.lower():
                 # Try to extract current level from terminal output
                 import re
-                level_matches = re.findall(r'bandit(\d+)', self.terminal_output.lower())
+
+                level_matches = re.findall(r"bandit(\d+)", self.terminal_output.lower())
                 if level_matches:
                     try:
                         new_level = int(level_matches[-1])  # Get the most recent match
@@ -1146,22 +1229,25 @@ Active: {session.is_active}"""
                             self.session_manager.update_session_level(self.session_id, new_level)
                             self.update_level_info()
                             self.update_session_display()
-                            self.notify(f"Detected level progression to Level {new_level}", severity="success")
+                            self.notify(
+                                f"Detected level progression to Level {new_level}",
+                                severity="information",
+                            )
                     except ValueError:
                         pass  # Ignore invalid level numbers
-    
+
     def _initialize_session(self) -> None:
         """Initialize or restore the active session."""
         try:
             # Try to get the active session
             active_session = self.session_manager.get_active_session()
-            
+
             if active_session:
                 # Restore session state
                 self.session_id = active_session.session_id
                 self.current_level = active_session.current_level
                 self.update_session_display()
-                self.notify(f"Restored session: {active_session.name}", severity="info")
+                self.notify(f"Restored session: {active_session.name}", severity="information")
             else:
                 # Create a default session if none exists
                 sessions = self.session_manager.list_sessions()
@@ -1180,20 +1266,108 @@ Active: {session.is_active}"""
             # Create a fallback session
             self.session_id = "default"
             self.current_level = 0
-    
+
     def _handle_error_and_stop_loading(self, message: str) -> None:
-        """Handle error and stop loading state.
-        
+        """Handle error with user-friendly feedback and stop loading.
+
         Args:
             message: Error message to display.
         """
-        self.notify(message, severity="error")
+        # Log error for debugging
+        self._log_error(f"Validation error: {message}")
+
+        # Provide actionable feedback based on error type
+        user_message = self._get_user_friendly_error_message(message)
+
+        self.notify(user_message, severity="error")
         self.loading = False
+
+    def _log_error(self, message: str) -> None:
+        """Log error to file for debugging."""
+        try:
+            import os
+            from datetime import datetime
+
+            # Create logs directory if it doesn't exist
+            log_dir = os.path.expanduser("~/.bandit_cli/logs")
+            os.makedirs(log_dir, exist_ok=True)
+
+            # Create error log file with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_file = os.path.join(log_dir, f"errors_{timestamp}.log")
+
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now().isoformat()} - {message}\n")
+        except Exception:
+            # Fallback if logging fails
+            pass
+
+    def _get_user_friendly_error_message(self, technical_message: str) -> str:
+        """Convert technical error messages to user-friendly, actionable messages.
+
+        Args:
+            technical_message: The original technical error message.
+
+        Returns:
+            str: User-friendly error message with suggestions.
+        """
+        message_lower = technical_message.lower()
+
+        # Connection-related errors
+        if "connection" in message_lower or "network" in message_lower:
+            if "timeout" in message_lower:
+                return "🔌 Connection timeout. Check your internet connection and try again."
+            elif "refused" in message_lower:
+                return "🚫 Connection refused. The server may be busy or down. Try again in a few minutes."
+            elif "authentication" in message_lower or "password" in message_lower:
+                return "🔑 Authentication failed. Double-check your username and password, then try again."
+            elif "host" in message_lower:
+                return "🌐 Host not found. Verify the server address and your network connection."
+            else:
+                return "🔌 Network error. Check your connection and try again."
+
+        # Input validation errors
+        elif "invalid" in message_lower or "validation" in message_lower:
+            if "username" in message_lower:
+                return "👤 Invalid username. Use only letters, numbers, underscores, and hyphens (3-32 chars)."
+            elif "password" in message_lower:
+                return "🔒 Password required. Please enter a valid password."
+            elif "port" in message_lower:
+                return "🔌 Invalid port. Use a number between 1-65535."
+            elif "format" in message_lower:
+                return "📝 Invalid format. Please check your input and try again."
+            else:
+                return "❌ Invalid input. Please check your input and try again."
+
+        # File/system errors
+        elif "file" in message_lower or "not found" in message_lower:
+            if "permission" in message_lower:
+                return "🔒 Permission denied. Check file permissions and try running with appropriate access."
+            elif "directory" in message_lower:
+                return "📁 Directory not found. Check the file path and try again."
+            else:
+                return (
+                    "📄 File error. Check if the file exists and you have permission to access it."
+                )
+
+        # AI/mentor errors
+        elif "ai" in message_lower or "mentor" in message_lower:
+            if "api" in message_lower or "key" in message_lower:
+                return "🤖 AI service unavailable. Check your API key and internet connection."
+            elif "rate" in message_lower or "limit" in message_lower:
+                return "⏱️ Rate limit reached. Wait a moment before trying again."
+            else:
+                return "🧠 AI mentor error. Try again or check your configuration."
+
+        # Default fallback
+        return f"❌ Error: {technical_message}. Please try again or check the documentation."
+
 
 def main() -> None:
     """Run the BanditCLI application."""
     app = BanditCLIApp()
     app.run()
+
 
 if __name__ == "__main__":
     main()

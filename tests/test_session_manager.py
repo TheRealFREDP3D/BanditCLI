@@ -1,9 +1,10 @@
 """Unit tests for the session manager module."""
+
 import os
 import sys
 
 # Add the src directory to the path so we can import the modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from session_manager import SessionManager
 
@@ -35,12 +36,7 @@ class TestSessionManager:
 
         # Create a session
         session_info = session_manager.create_session(
-            "test_session",
-            "Test Session",
-            "test.host",
-            2220,
-            "testuser",
-            0
+            "test_session", "Test Session", "test.host", 2220, "testuser", 0
         )
 
         # Check that session was created
@@ -63,12 +59,7 @@ class TestSessionManager:
 
         # Create a session
         session_manager.create_session(
-            "test_session",
-            "Test Session",
-            "test.host",
-            2220,
-            "testuser",
-            0
+            "test_session", "Test Session", "test.host", 2220, "testuser", 0
         )
 
         # Get the session
@@ -101,12 +92,7 @@ class TestSessionManager:
 
         # Create a session
         session_manager.create_session(
-            "test_session",
-            "Test Session",
-            "test.host",
-            2220,
-            "testuser",
-            0
+            "test_session", "Test Session", "test.host", 2220, "testuser", 0
         )
 
         # Get initial last_used time
@@ -128,12 +114,7 @@ class TestSessionManager:
 
         # Create a session
         session_manager.create_session(
-            "test_session",
-            "Test Session",
-            "test.host",
-            2220,
-            "testuser",
-            0
+            "test_session", "Test Session", "test.host", 2220, "testuser", 0
         )
 
         # Delete the session
@@ -149,12 +130,7 @@ class TestSessionManager:
 
         # Create a session
         session_manager.create_session(
-            "test_session",
-            "Test Session",
-            "test.host",
-            2220,
-            "testuser",
-            0
+            "test_session", "Test Session", "test.host", 2220, "testuser", 0
         )
 
         # Set current session
@@ -179,12 +155,7 @@ class TestSessionManager:
 
         # Create a session
         session_manager.create_session(
-            "test_session",
-            "Test Session",
-            "test.host",
-            2220,
-            "testuser",
-            0
+            "test_session", "Test Session", "test.host", 2220, "testuser", 0
         )
 
         # Check that session exists
