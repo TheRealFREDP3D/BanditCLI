@@ -57,110 +57,23 @@ class OutputBuffer:
 class ANSIColorParser:
     """Parser for ANSI color codes and terminal escape sequences."""
 
-    # ANSI color mapping to Textual markup
-    ANSI_TO_TEXTUAL = {
-        "30": "[black]",  # Black
-        "31": "[red]",  # Red
-        "32": "[green]",  # Green
-        "33": "[yellow]",  # Yellow
-        "34": "[blue]",  # Blue
-        "35": "[magenta]",  # Magenta
-        "36": "[cyan]",  # Cyan
-        "37": "[white]",  # White
-        "90": "[dim black]",  # Bright Black (Gray)
-        "91": "[bright red]",  # Bright Red
-        "92": "[bright green]",  # Bright Green
-        "93": "[bright yellow]",  # Bright Yellow
-        "94": "[bright blue]",  # Bright Blue
-        "95": "[bright magenta]",  # Bright Magenta
-        "96": "[bright cyan]",  # Bright Cyan
-        "97": "[bright white]",  # Bright White
-        # Background colors
-        "40": "on black",
-        "41": "on red",
-        "42": "on green",
-        "43": "on yellow",
-        "44": "on blue",
-        "45": "on magenta",
-        "46": "on cyan",
-        "47": "on white",
-        "100": "on dim black",
-        "101": "on bright red",
-        "102": "on bright green",
-        "103": "on bright yellow",
-        "104": "on bright blue",
-        "105": "on bright magenta",
-        "106": "on bright cyan",
-        "107": "on bright white",
-    }
-
-    # ANSI reset codes
-    RESET_CODES = {"0", "39", "49"}
-
     def __init__(self) -> None:
-        self.ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
-        self.current_format = []
+        # Match CSI sequences (ending in letter) and OSC sequences (ending in BEL)
+        self.ansi_pattern = re.compile(
+            r"(?:\x1b\[\??[0-9;]*[a-zA-Z])|"  # CSI
+            r"(?:\x1b\].*?\x07)"  # OSC
+        )
 
     def parse_ansi_text(self, text: str) -> str:
-        """Parse ANSI escape sequences and convert to Textual markup."""
+        """Parse ANSI escape sequences and strip them for plain text display."""
         if not text:
             return text
 
-        # Find all ANSI escape sequences
-        matches = list(self.ansi_pattern.finditer(text))
-        if not matches:
-            return text
-        result = []
-        last_end = 0
+        # Remove carriage returns usually associated with newlines in SSH output
+        text = text.replace("\r\n", "\n").replace("\r", "")
 
-        for match in matches:
-            # Add text before the escape sequence
-            if match.start() > last_end:
-                plain_text = text[last_end : match.start()]
-                result.append(plain_text)
-
-            # Parse the ANSI sequence
-            ansi_code = match.group()
-            parsed_format = self._parse_ansi_sequence(ansi_code)
-
-            if parsed_format:
-                result.append(parsed_format)
-
-            last_end = match.end()
-        # Add remaining text
-        if last_end < len(text):
-            result.append(text[last_end:])
-
-        return "".join(result)
-
-    def _parse_ansi_sequence(self, ansi_code: str) -> str:
-        """Parse a single ANSI escape sequence."""
-        # Extract the numbers between \x1b[ and m
-        code_content = ansi_code[2:-1]  # Remove \x1b[ and m
-        if not code_content:
-            return "[/]"  # Reset if no codes
-
-        codes = code_content.split(";")
-        result_parts = []
-
-        for code in codes:
-            if code in self.RESET_CODES:
-                # Reset all formatting
-                self.current_format.clear()
-                return "[/]"
-            elif code in self.ANSI_TO_TEXTUAL:
-                # Add the formatting
-                format_str = self.ANSI_TO_TEXTUAL[code]
-                if "on " in format_str:
-                    # Background color
-                    result_parts.append(format_str)
-                else:
-                    # Foreground color or style
-                    result_parts.append(format_str)
-        if result_parts:
-            return f"[{' '.join(result_parts)}]"
-
-        return ""
+        # Remove all ANSI sequences
+        return self.ansi_pattern.sub("", text)
 
 
 class TerminalOutputSearch:
@@ -292,17 +205,28 @@ class VirtualScrollingTextArea(TextArea):
 
         # Update visible range if scrolling to bottom
         if scroll_to_bottom:
-            self._scroll_to_bottom()
+            self.scroll_to_bottom(refresh=True)
+        else:
+            self._update_display()
 
-        # Update display
-        self._update_display()
+    def scroll_to_bottom(self, refresh: bool = True) -> None:
+        """Scroll to the bottom of the content.
 
-    def _scroll_to_bottom(self) -> None:
-        """Scroll to the bottom of the content."""
+        Args:
+            refresh: Whether to refresh the display immediately.
+        """
         if self._total_lines > self._visible_count:
             self._visible_start = self._total_lines - self._visible_count
         else:
             self._visible_start = 0
+
+        if refresh:
+            self._update_display()
+            # Move cursor to the bottom of the currently visible content
+            # This ensures the widget physically scrolls to show the last line
+            visible_rows = min(len(self._virtual_buffer), self._visible_count)
+            if visible_rows > 0:
+                self.move_cursor((visible_rows - 1, 0))
 
     def _update_display(self) -> None:
         """Update the visible display with current virtual buffer content."""
@@ -340,6 +264,14 @@ class VirtualScrollingTextArea(TextArea):
             "usage_percent": (len(self._virtual_buffer) / self._max_buffer_size) * 100,
         }
 
+    def clear(self) -> None:
+        """Clear the text area and virtual buffer."""
+        self._virtual_buffer.clear()
+        self._total_lines = 0
+        self._visible_start = 0
+        super().clear()
+        self._update_display()
+
 
 class EnhancedTerminalOutput(VirtualScrollingTextArea):
     """Enhanced terminal output widget with advanced features."""
@@ -368,7 +300,16 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
             text: The text to append
             scroll_to_bottom: Whether to scroll to bottom after appending
         """
-        # Parse ANSI color codes
+        # Check for ANSI clear screen sequences (\x1b[2J or \x1b[3J)
+        if "\x1b[2J" in text or "\x1b[3J" in text:
+            self.clear()
+            # If there's more text after the clear sequence, we should still process it
+            # Strip the clear sequences and continue
+            text = text.replace("\x1b[2J", "").replace("\x1b[3J", "")
+            if not text.strip():
+                return
+
+        # Parse ANSI color codes (stripping them for plain text)
         parsed_text = self.ansi_parser.parse_ansi_text(text)
 
         # Add to buffer for export functionality
@@ -429,21 +370,20 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
         except Exception as e:
             self.app.notify(f"Failed to export terminal output: {e}", severity="error")
 
-    def action_clear(self) -> None:
-        """Clear the terminal output."""
-        self.buffer.clear()
-        self.clear()
-        self.search.clear_search()
-        # Clear the parent's virtual buffer
-        self._virtual_buffer.clear()
-        self._total_lines = 0
-        self._visible_start = 0
-        self._update_display()
-        self.app.notify("Terminal output cleared", severity="info")
-
     def set_auto_scroll(self, enabled: bool) -> None:
         """Enable or disable auto-scrolling."""
         self.auto_scroll_enabled = enabled
+
+    def clear(self) -> None:
+        """Clear the terminal output and all buffers."""
+        self.buffer.clear()
+        self.search.clear_search()
+        super().clear()
+
+    def action_clear(self) -> None:
+        """Clear the terminal output."""
+        self.clear()
+        self.app.notify("Terminal output cleared", severity="info")
 
     def get_buffer_stats(self) -> Dict[str, int]:
         """Get buffer statistics."""

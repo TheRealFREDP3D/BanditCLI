@@ -61,11 +61,19 @@ EnhancedTerminalOutput:focus {
     border-bottom: solid $secondary;
 }
 
+/* Command input bar styling (for terminal tab) */
+#command-input-bar {
+    height: auto;
+    margin: 0;
+    padding: 1 0;
+    background: $surface;
+    border-top: solid $secondary;
+}
+
 /* Command input styling */
 #command_input {
-    width: 80%;
-    margin: 0 1 0 1;
-    display: block;
+    width: 100%;
+    margin: 0 1;
     background: $surface;
     color: $text;
     border: solid $secondary;
@@ -191,6 +199,35 @@ Button:disabled {
     min-width: 20w;
 }
 
+/* Session controls styling */
+#session-controls {
+    height: auto;
+    margin: 1 0;
+    padding: 1 0;
+    background: $surface;
+    border-top: solid $secondary;
+    border-bottom: solid $secondary;
+}
+
+#session-controls > Label {
+    width: auto;
+    margin: 0 1;
+    min-width: 8;
+}
+
+#session-controls > Button {
+    width: auto;
+    margin: 0 1;
+    min-width: 12;
+}
+
+#current_session_display {
+    width: 1fr;
+    margin: 0 1;
+    padding: 0 1;
+    text-align: left;
+}
+
 /* Label styling */
 Label {
     margin: 1 0;
@@ -250,4 +287,46 @@ VersionFooter > Horizontal {
     color: $primary;
     text-style: bold;
     width: 8;
+}
+
+/* Delete Session Modal */
+DeleteSessionModal {
+    align: center middle;
+}
+
+#delete_dialog {
+    width: 60;
+    height: auto;
+    border: thick $background 80%;
+    background: $surface;
+    padding: 1 2;
+}
+
+#delete_label {
+    width: 100%;
+    text-align: center;
+    margin: 1 0;
+}
+
+#no_sessions_label {
+    width: 100%;
+    text-align: center;
+    margin: 2 0;
+    color: $error;
+}
+
+#session_list {
+    height: 10;
+    border: solid $secondary;
+    margin: 1 0;
+}
+
+#delete_buttons {
+    align: center bottom;
+    height: auto;
+    margin: 1 0;
+}
+
+#delete_buttons > Button {
+    margin: 0 1;
 }

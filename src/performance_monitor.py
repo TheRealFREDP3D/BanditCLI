@@ -88,10 +88,8 @@ class PerformanceMonitor:
         logger.setLevel(logging.INFO)
 
         if not logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
+            # Use NullHandler to prevent output to stderr/stdout which breaks TUI
+            logger.addHandler(logging.NullHandler())
 
         return logger
 
@@ -337,20 +335,20 @@ class PerformanceMonitor:
         metrics = self.get_metrics()
         recent_alerts = self.get_recent_alerts(5)
 
-        report = f"""Performance Report - {time.strftime('%Y-%m-%d %H:%M:%S')}
-{'='*60}
+        report = f"""Performance Report - {time.strftime("%Y-%m-%d %H:%M:%S")}
+{"=" * 60}
 
 Memory Usage:
   Current: {metrics.memory_usage_mb:.1f} MB
-  Threshold: {self.thresholds.get('memory_usage_mb', 500.0)} MB
+  Threshold: {self.thresholds.get("memory_usage_mb", 500.0)} MB
 
 Cache Performance:
   Hit Rate: {metrics.cache_hit_rate:.1f}%
-  Threshold: {self.thresholds.get('cache_hit_rate', 50.0)}%
+  Threshold: {self.thresholds.get("cache_hit_rate", 50.0)}%
 
 SSH Performance:
   Last Connection: {metrics.ssh_connection_time_ms:.2f} ms
-  Threshold: {self.thresholds.get('ssh_connection_time_ms', 5000.0)} ms
+  Threshold: {self.thresholds.get("ssh_connection_time_ms", 5000.0)} ms
 
 Terminal Output:
   Lines: {metrics.terminal_output_lines}
@@ -371,7 +369,7 @@ Recent Alerts ({len(recent_alerts)}):
                         f"  {func_name}: {stats['avg_ms']:.2f}ms avg ({stats['count']} calls)\n"
                     )
 
-        report += f"\n{'='*60}\n"
+        report += f"\n{'=' * 60}\n"
         return report
 
 

@@ -22,6 +22,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.events import Key
 from textual.reactive import reactive
+from textual.screen import ModalScreen
 from textual.validation import Function, ValidationResult
 from textual.widget import Widget
 from textual.widgets import (
@@ -31,6 +32,7 @@ from textual.widgets import (
     Input,
     Label,
     LoadingIndicator,
+    SelectionList,
     Static,
     TabbedContent,
     TabPane,
@@ -51,21 +53,78 @@ from src.terminal_output import EnhancedTerminalOutput
 load_dotenv()
 
 
+class DeleteSessionModal(ModalScreen[bool]):
+    """Modal screen for deleting sessions."""
+
+    def __init__(self, session_manager: SessionManager) -> None:
+        super().__init__()
+        self.session_manager = session_manager
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="delete_dialog"):
+            yield Label("Select session to delete:", id="delete_label")
+
+            # Get available sessions (excluding active one)
+            active_session = self.session_manager.get_active_session()
+            active_id = active_session.session_id if active_session else None
+
+            options = []
+            for session in self.session_manager.list_sessions():
+                if session.session_id != active_id:
+                    options.append(
+                        (
+                            f"{session.get_display_name()} (Level {session.current_level})",
+                            session.session_id,
+                        )
+                    )
+
+            if not options:
+                yield Label("No other sessions available to delete.", id="no_sessions_label")
+                yield Button("Cancel", variant="primary", id="cancel_delete")
+            else:
+                yield SelectionList(*options, id="session_list")
+                with Horizontal(id="delete_buttons"):
+                    yield Button("Cancel", variant="primary", id="cancel_delete")
+                    yield Button("Delete Selected", variant="error", id="confirm_delete")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel_delete":
+            self.dismiss(False)
+        elif event.button.id == "confirm_delete":
+            selection_list = self.query_one(SelectionList)
+            if not selection_list.selected:
+                self.notify("Please select a session to delete", severity="warning")
+                return
+
+            # Delete selected sessions
+            deleted_count = 0
+            for session_id in selection_list.selected:
+                if self.session_manager.delete_session(session_id):
+                    deleted_count += 1
+
+            self.app.notify(f"Deleted {deleted_count} session(s)", severity="information")
+            self.dismiss(True)
+
+
 class ConnectionStatus(Static):
     """A widget to display SSH connection status with visual indicator."""
 
     connected = reactive(False)
 
-    def render(self) -> str:
-        """Render the connection status indicator.
-
-        Returns:
-            str: The status indicator with colored dot.
-        """
+    def _get_status_text(self) -> str:
+        """Get the status text based on connection state."""
         if self.connected:
             return "[green]●[/green] Connected"
         else:
             return "[red]●[/red] Disconnected"
+
+    def on_mount(self) -> None:
+        """Set initial status text on mount."""
+        self.update(self._get_status_text())
+
+    def watch_connected(self, connected: bool) -> None:
+        """Watch for changes to connected state and update content."""
+        self.update(self._get_status_text())
 
 
 class VersionFooter(Widget):
@@ -141,8 +200,9 @@ class BanditCLIApp(App):
         ("d", "toggle_dark", "Toggle dark mode"),
         ("q", "quit", "Quit"),
         ("1", "switch_tab('terminal')", "Terminal"),
-        ("2", "switch_tab('level')", "Level Info"),
-        ("3", "switch_tab('mentor')", "AI Mentor"),
+        ("2", "switch_tab('session')", "Session"),
+        ("3", "switch_tab('level')", "Level Info"),
+        ("4", "switch_tab('mentor')", "AI Mentor"),
         ("c", "show_cache_stats", "Cache Stats"),
         ("ctrl+c", "cancel_operation", "Cancel"),
         ("ctrl+shift+c", "clear_cache", "Clear Cache"),
@@ -241,16 +301,27 @@ class BanditCLIApp(App):
         Args:
             connected: Whether SSH is connected or not.
         """
-        with suppress(Exception):
-            # Widgets might not be ready yet
+        # Update buttons
+        try:
             self.query_one("#ssh_connect", Button).disabled = connected
             self.query_one("#ssh_disconnect", Button).disabled = not connected
-            # Update connection status indicator
+        except Exception:
+            # Widgets might not be ready/mounted yet
+            pass
+
+        # Update connection status indicator
+        try:
             connection_status = self.query_one("#connection_status", ConnectionStatus)
             connection_status.connected = connected
-            # Set focus to the terminal output
-            if connected:
+        except Exception:
+            pass
+
+        # Set focus to the terminal output if connected
+        if connected:
+            try:
                 self.query_one("#terminal_output", EnhancedTerminalOutput).focus()
+            except Exception:
+                pass
 
     def watch_loading(self, loading: bool) -> None:
         """Called when the loading reactive property changes.
@@ -267,11 +338,11 @@ class BanditCLIApp(App):
         """Create child widgets for the app.
 
         Composes the main application layout with a header, tabbed content
-        containing three tabs (Terminal, Level Info, and AI Mentor), and a custom footer.
+        containing four tabs (Terminal, Session, Level Info, and AI Mentor), and a custom footer.
 
         Yields:
             Header: The application header.
-            TabbedContent: Container for the three main tabs.
+            TabbedContent: Container for the four main tabs.
             VersionFooter: A custom footer with version display and key bindings.
         """
         yield Header()
@@ -280,6 +351,8 @@ class BanditCLIApp(App):
             with TabPane("Terminal", id="terminal"):
                 with Vertical():
                     yield from self.compose_terminal_view()
+            with TabPane("Session", id="session"):
+                yield from self.compose_session_view()
             with TabPane("Level Info", id="level"):
                 yield from self.compose_level_view()
             with TabPane("AI Mentor", id="mentor"):
@@ -290,40 +363,58 @@ class BanditCLIApp(App):
     def compose_terminal_view(self) -> ComposeResult:
         """Compose the terminal view.
 
-        Creates the terminal tab layout with output display, SSH connection
-        controls (username, password, port, timeout), and command input controls.
+        Creates the terminal tab layout with only terminal output display
+        and command input field, maximizing screen space for terminal usage.
+
+        Yields:
+            EnhancedTerminalOutput: Terminal output display.
+            Input: Command input field for SSH interaction.
+        """
+        yield EnhancedTerminalOutput(id="terminal_output", read_only=True)
+        with Horizontal(id="command-input-bar"):
+            yield Input(placeholder="Enter command...", id="command_input")
+
+    def compose_session_view(self) -> ComposeResult:
+        """Compose the session management view.
+
+        Creates the session tab layout with SSH connection controls and
+        session management features.
 
         Yields:
             LoadingIndicator: Shows loading state.
             ConnectionStatus: Shows connection status with visual indicator.
-            EnhancedTerminalOutput: Terminal output display.
-            Input: Command input field for SSH interaction.
-            Various input widgets and buttons for SSH and command controls.
+            Various input widgets and buttons for SSH connection and session management.
         """
-        yield LoadingIndicator()
-        with Horizontal(id="connection-status-bar"):
-            yield ConnectionStatus(id="connection_status")
-        yield EnhancedTerminalOutput(id="terminal_output", read_only=True)
-        with Vertical(id="ssh-controls"):
-            with Horizontal():
-                yield Label("Username:", id="username-label")
-                yield Input(
-                    placeholder="bandit0",
-                    id="ssh_username",
-                    validators=[Function(validate_username, "Invalid username")],
-                )
-                yield Label("Password:", id="password-label")
-                yield Input(placeholder="bandit0", id="ssh_password", password=True)
-            with Horizontal():
-                yield Label("Port:", id="port-label")
-                yield Input(placeholder="2220", id="ssh_port")
-                yield Button("Connect", variant="primary", id="ssh_connect")
-                yield Button("Disconnect", variant="error", id="ssh_disconnect")
-        with Horizontal(id="session-controls"):
-            yield Label("Session:", id="session-label")
-            yield Button("New Session", id="new_session")
-            yield Button("Switch Session", id="switch_session")
-            yield Static(id="current_session_display")
+        with Vertical():
+            yield LoadingIndicator()
+            with Horizontal(id="connection-status-bar"):
+                yield ConnectionStatus(id="connection_status")
+
+            # SSH Connection Controls
+            with Vertical(id="ssh-controls"):
+                yield Label("[bold]SSH Connection[/bold]")
+                with Horizontal():
+                    yield Label("Username:", id="username-label")
+                    yield Input(
+                        placeholder="bandit0",
+                        id="ssh_username",
+                        validators=[Function(validate_username, "Invalid username")],
+                    )
+                    yield Label("Password:", id="password-label")
+                    yield Input(placeholder="bandit0", id="ssh_password", password=True)
+                with Horizontal():
+                    yield Label("Port:", id="port-label")
+                    yield Input(placeholder="2220", id="ssh_port")
+                    yield Button("Connect", variant="primary", id="ssh_connect")
+                    yield Button("Disconnect", variant="error", id="ssh_disconnect")
+
+            # Session Management Controls
+            with Horizontal(id="session-controls"):
+                yield Label("Session:", id="session-label")
+                yield Button("New Session", id="new_session")
+                yield Button("Switch Session", id="switch_session")
+                yield Button("Delete Session", id="delete_session", variant="error")
+                yield Static(id="current_session_display")
 
     def compose_level_view(self) -> ComposeResult:
         """Compose the level information view.
@@ -431,56 +522,54 @@ class BanditCLIApp(App):
             self.notify(f"Cache warming failed: {e}", severity="warning")
 
     async def run_welcome_animation(self) -> None:
-        """Displays an animated cyberglitch welcome sequence in the terminal."""
+        """Displays the welcome animation with ASCII art and instructions."""
         terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
 
-        glitch_chars = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
-        boot_messages = [
-            " [ SYSTEM ] BANDIT-OS KERNEL LOADING...",
-            " [  OK  ] CORE FREQUENCY AT 4.2GHz",
-            " [  OK  ] NEURAL INTERFACE STABILIZED",
-            " [ WARN ] ENCRYPTION LAYER OVERRIDE DETECTED",
-            " [  OK  ] BYPASSING FIREWALL...",
-            " [ SYSTEM ] ACCESS GRANTED TO OTW-BANDIT NODES",
-            " ------------------------------------------------",
+        # False Server Loading
+        loading_steps = [
+            " [ init ] Connecting to OTW secure gateway...",
+            " [ net  ] Establishing encrypted tunnel...",
+            " [ auth ] Verifying handshake keys...",
+            " [ load ] Loading Bandit wargame modules...",
+            " [ ok   ] Connection established."
         ]
 
-        def get_glitch():
-            return "".join(random.choice(glitch_chars) for _ in range(10))
-
-        # Initial Glitch Effect
-        for _ in range(5):
-            terminal.append_text(f"INITIALIZING... {get_glitch()}\n", scroll_to_bottom=False)
-            await asyncio.sleep(0.05)
-
-        terminal.clear()
-
-        # Simulated Boot Sequence
-        for msg in boot_messages:
-            if self.ssh_connected:
-                return  # Abort if user connects early
-            terminal.append_text(msg + "\n", scroll_to_bottom=False)
-            await asyncio.sleep(0.15)
-
-        await asyncio.sleep(0.3)
-
-        # Cyber Glitch Line
-        glitch_line = " [ CRITICAL ] " + get_glitch() + " STABILITY RESTORED " + get_glitch() + "\n"
-        terminal.append_text(glitch_line, scroll_to_bottom=False)
-        await asyncio.sleep(0.5)
-
-        # Final Directives Typewriter Message
-        final_message = "\nWhen ready, enter username and password to connect to SSH game server. The Level Info tab has more detailed directives if you need help.\n"
-
-        for char in final_message:
+        for step in loading_steps:
             if self.ssh_connected:
                 return
-            terminal.append_text(char, scroll_to_bottom=False)
-            # Speed up for spaces/newlines
-            await asyncio.sleep(0.01 if char in " \n" else 0.03)
+            terminal.append_text(step + "\n", scroll_to_bottom=False)
+            await asyncio.sleep(0.4)
 
-        # Scroll to bottom at the end
-        terminal._scroll_to_bottom()
+        await asyncio.sleep(0.5)
+
+        # ASCII Art Title
+        ascii_title = r"""
+  ____                  _ _ _    ____ _     ___ 
+ | __ )  __ _ _ __   __| (_) |_ / ___| |   |_ _|
+ |  _ \ / _` | '_ \ / _` | | __| |   | |    | | 
+ | |_) | (_| | | | | (_| | | |_| |___| |___ | | 
+ |____/ \__,_|_| |_|\__,_|_|\__|\____|_____|___|
+"""
+        terminal.append_text(ascii_title + "\n", scroll_to_bottom=False)
+        await asyncio.sleep(0.5)
+
+        # Instructions
+        instructions = [
+            "\n",
+            "HOW TO START:",
+            "1. Read Level 0 directives in the Level Info tab",
+            "2. Connect to the server in the Session tab",
+            "3. Play the game by sending commands in the Terminal tab",
+            "\n",
+        ]
+
+        for line in instructions:
+            if self.ssh_connected:
+                return
+            terminal.append_text(line + "\n", scroll_to_bottom=False)
+            await asyncio.sleep(0.1)
+
+        terminal.scroll_to_bottom()
 
     @track_performance("update_level_info")
     def update_level_info(self) -> None:
@@ -519,6 +608,8 @@ class BanditCLIApp(App):
             self.create_new_session()
         elif event.button.id == "switch_session":
             self.show_session_switch_dialog()
+        elif event.button.id == "delete_session":
+            self.show_delete_session_dialog()
 
     def on_key(self, event: Key) -> None:
         """Handle keyboard events including command history navigation.
@@ -601,6 +692,8 @@ class BanditCLIApp(App):
         """
         if event.input.id == "mentor_input":
             self.send_mentor_message()
+        elif event.input.id == "command_input":
+            self.send_ssh_command()
 
     @track_performance("connect_ssh")
     def connect_ssh(self) -> None:
@@ -708,6 +801,7 @@ class BanditCLIApp(App):
                 self.session_manager.set_active_session(self.session_id)
 
                 self.ssh_connected = True
+                self.loading = False  # Ensure loading is stopped on success
                 self.notify("SSH connection established", severity="information")
                 # Set up the output callback
                 if connection := self.ssh_manager.get_connection(self.session_id):
@@ -757,6 +851,56 @@ class BanditCLIApp(App):
         self.ssh_connected = False
         self.notify("SSH connection closed", severity="information")
 
+    def send_ssh_command(self) -> None:
+        """Send a command from the command input field to the SSH connection.
+
+        Retrieves the command from the command_input field, sends it to the
+        active SSH connection, clears the input field, and adds the command
+        to the history.
+        """
+        try:
+            # Get the command input widget
+            command_input = self.query_one("#command_input", Input)
+            command = command_input.value.strip()
+
+            # Only proceed if we have a command
+            if not command:
+                return
+
+            # Support local 'clear' command
+            if command.lower() == "clear":
+                terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
+                terminal.clear()
+                command_input.value = ""
+                return
+
+            if not self.ssh_connected:
+                self.notify("Not connected to SSH. Please connect first.", severity="warning")
+                return
+
+            # Get the SSH connection
+            connection = self.ssh_manager.get_connection(self.session_id)
+            if not connection:
+                self.notify("SSH connection lost", severity="error")
+                self.ssh_connected = False
+                return
+
+            # Send the command with newline
+            connection.send_command(command + "\n")
+
+            # Add to command history
+            self.command_history.add_command(command)
+
+            # Clear the input field
+            command_input.value = ""
+
+            # Scroll terminal to bottom
+            terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
+            terminal.scroll_to_bottom()
+
+        except Exception as e:
+            self.notify(f"Error sending command: {e}", severity="error")
+
     def on_ssh_output(self, data: str) -> None:
         """Handle SSH output data with memory optimization.
 
@@ -767,11 +911,6 @@ class BanditCLIApp(App):
         Args:
             data: The output data received from the SSH connection.
         """
-        # If this is the first real output after the welcome animation, clear the animation
-        if self.terminal_output == "":
-            terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
-            terminal.clear()
-
         # Add new data and enforce size limit
         self.terminal_output += data
 
@@ -846,12 +985,12 @@ class BanditCLIApp(App):
             export_path = os.path.expanduser(f"~/Documents/{filename}")
 
             # Build markdown content
-            markdown_content = f"""# Bandit CLI Conversation Export\n\n**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n**Level:** {self.current_level}\n**Session:** {self.session_id}\n\n---\n\n## Conversation History\n\n"""
+            markdown_content = f"""# Bandit CLI Conversation Export\n\n**Date:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n**Level:** {self.current_level}\n**Session:** {self.session_id}\n\n---\n\n## Conversation History\n\n"""
 
             for i, message in enumerate(history):
                 role = message.get("role", "unknown").title()
                 content = message.get("content", "")
-                markdown_content += f"**{i+1}. {role}:** {content}\n\n"
+                markdown_content += f"**{i + 1}. {role}:** {content}\n\n"
 
             # Write to file
             os.makedirs(os.path.dirname(export_path), exist_ok=True)
@@ -960,16 +1099,16 @@ class BanditCLIApp(App):
         stats_message = f"""Cache & Performance Statistics:
 
 Level Info Cache:
-- Hits: {level_stats['hits']}
-- Misses: {level_stats['misses']}
-- Hit Rate: {level_stats['hit_rate_percent']}%
-- Cache Size: {level_stats['cache_size']} items
+- Hits: {level_stats["hits"]}
+- Misses: {level_stats["misses"]}
+- Hit Rate: {level_stats["hit_rate_percent"]}%
+- Cache Size: {level_stats["cache_size"]} items
 
 AI Mentor Cache:
-- Hits: {ai_stats['hits']}
-- Misses: {ai_stats['misses']}
-- Hit Rate: {ai_stats['hit_rate_percent']}%
-- Cache Size: {ai_stats['cache_size']} items
+- Hits: {ai_stats["hits"]}
+- Misses: {ai_stats["misses"]}
+- Hit Rate: {ai_stats["hit_rate_percent"]}%
+- Cache Size: {ai_stats["cache_size"]} items
 
 Performance Metrics:
 - Memory Usage: {perf_metrics.memory_usage_mb:.1f} MB
@@ -1094,8 +1233,8 @@ Name: {session.name}
 ID: {session.session_id[:8]}...
 Connection: {session.get_display_name()}
 Current Level: {session.current_level}
-Created: {session.created_at.strftime('%Y-%m-%d %H:%M')}
-Last Used: {session.last_used.strftime('%Y-%m-%d %H:%M')}
+Created: {session.created_at.strftime("%Y-%m-%d %H:%M")}
+Last Used: {session.last_used.strftime("%Y-%m-%d %H:%M")}
 Connections: {session.connection_count}
 Active: {session.is_active}"""
             self.notify(info, severity="information")
@@ -1164,7 +1303,7 @@ Active: {session.is_active}"""
         # In a full implementation, this would show a proper dialog
         session_list = "\n".join(
             [
-                f"{i+1}. {s.name} ({s.get_display_name()}) - Level {s.current_level}"
+                f"{i + 1}. {s.name} ({s.get_display_name()}) - Level {s.current_level}"
                 for i, s in enumerate(sessions[:5])  # Show first 5 sessions
             ]
         )
@@ -1173,6 +1312,16 @@ Active: {session.is_active}"""
             f"Available sessions:\n{session_list}\n\nUse session number to switch",
             severity="information",
         )
+
+    def show_delete_session_dialog(self) -> None:
+        """Show the delete session dialog."""
+
+        def after_delete(changed: bool) -> None:
+            if changed:
+                # Refresh UI if needed
+                self.update_session_display()
+
+        self.push_screen(DeleteSessionModal(self.session_manager), after_delete)
 
     def update_session_display(self) -> None:
         """Update the session display in the UI."""
