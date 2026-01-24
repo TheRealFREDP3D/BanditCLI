@@ -75,7 +75,7 @@ class BanditLevelInfo:
         cache_key = f"levels_data_{self.levels_file_path}"
         cached_data = self.cache.get(cache_key)
         if cached_data is not None:
-            self.notify("Loaded level data from cache", severity="info")
+            self.notify("Loaded level data from cache", "info")
             return cached_data
 
         # Load from file and cache the result
@@ -90,7 +90,7 @@ class BanditLevelInfo:
             with importlib.resources.open_text("src", self.levels_file_path) as f:
                 data = json.load(f)
                 self.notify(
-                    f"Loaded {len(data)} levels from {self.levels_file_path}", severity="info"
+                    f"Loaded {len(data)} levels from {self.levels_file_path}", "info"
                 )
                 return data
         except (FileNotFoundError, AttributeError):
@@ -100,13 +100,13 @@ class BanditLevelInfo:
                 file_path = os.path.join(current_dir, self.levels_file_path)
                 with open(file_path, encoding="utf-8") as f:
                     data = json.load(f)
-                    self.notify(f"Loaded {len(data)} levels from fallback path", severity="info")
+                    self.notify(f"Loaded {len(data)} levels from fallback path", "info")
                     return data
             except (FileNotFoundError, json.JSONDecodeError) as e:
-                self.notify(f"Error loading level data: {e}", severity="error")
+                self.notify(f"Error loading level data: {e}", "error")
                 return self._get_fallback_data()
         except json.JSONDecodeError as e:
-            self.notify(f"Invalid JSON in level data file: {e}", severity="error")
+            self.notify(f"Invalid JSON in level data file: {e}", "error")
             return self._get_fallback_data()
 
     def _get_fallback_data(self) -> Dict:
@@ -337,4 +337,4 @@ https://overthewire.org/wargames/bandit/"""
             self.cache.clear_key(f"level_info_{level}")
             self.cache.clear_key(f"formatted_level_info_{level}")
 
-        self.notify("Level cache cleared", severity="info")
+        self.notify("Level cache cleared", "info")

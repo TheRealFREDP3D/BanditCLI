@@ -214,7 +214,7 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
         cache_key = self.cache.generate_hash_key(current_level, user_message)
         cached_response = self.cache.get(cache_key)
         if cached_response is not None:
-            self.notify("AI response loaded from cache", severity="info")
+            self.notify("AI response loaded from cache", "info")
             if stream:
                 yield from cached_response
             else:
@@ -357,7 +357,7 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
     def clear_cache(self) -> None:
         """Clear all AI mentor cache entries."""
         self.cache.clear()
-        self.notify("AI mentor cache cleared", severity="info")
+        self.notify("AI mentor cache cleared", "info")
 
     def get_context_suggestions(
         self, terminal_output: str, recent_commands: List[str]
@@ -411,7 +411,8 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             str: AI response with context suggestions
         """
         # Get base response
-        response = self.get_response(level, question)
+        response_gen = self.get_response(question, current_level=level, stream=False)
+        response = "".join(response_gen)
 
         # Add context suggestions if terminal output is provided
         if terminal_output and recent_commands is not None:
@@ -473,7 +474,8 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
 
         try:
             # Get base response
-            response = self.get_response(level, question)
+            response_gen = self.get_response(question, current_level=level, stream=False)
+            response = "".join(response_gen)
 
             # Calculate response time
             response_time = time.time() - start_time

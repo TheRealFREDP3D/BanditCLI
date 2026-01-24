@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from command_history import CommandHistory
-from main import BanditCLIApp
+from src.main import BanditCLIApp
 from session_manager import SessionManager
 from ssh_manager import SSHManager
 

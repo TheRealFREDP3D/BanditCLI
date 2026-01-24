@@ -11,7 +11,6 @@ three main tabs: Terminal, Level Info, and AI Mentor.
 # src/main.py
 import asyncio
 import os
-import random
 import re
 import time
 from contextlib import suppress
@@ -39,15 +38,15 @@ from textual.widgets import (
     TextArea,
 )
 
-from src import __version__
-from src.ai_mentor import BanditAIMentor
-from src.command_history import CommandHistory
-from src.config import ConfigManager
-from src.level_info import BanditLevelInfo
-from src.performance_monitor import get_performance_monitor, track_performance
-from src.session_manager import SessionManager
-from src.ssh_manager import SSHManager
-from src.terminal_output import EnhancedTerminalOutput
+from . import __version__
+from .ai_mentor import BanditAIMentor
+from .command_history import CommandHistory
+from .config import ConfigManager
+from .level_info import BanditLevelInfo
+from .performance_monitor import get_performance_monitor, track_performance
+from .session_manager import SessionManager
+from .ssh_manager import SSHManager
+from .terminal_output import EnhancedTerminalOutput
 
 # Load environment variables
 load_dotenv()
@@ -219,7 +218,16 @@ class BanditCLIApp(App):
             message: The message to display.
             severity: The severity level of the message.
         """
-        self.notify(message, severity=severity)
+        # Map severity levels to Textual supported values
+        severity_map = {
+            "info": "information",
+            "success": "information",
+            "error": "error",
+            "warning": "warning",
+        }
+        # Default to "information" if unknown severity
+        textual_severity = severity_map.get(severity, "information")
+        self.notify(message, severity=textual_severity)
 
     def __init__(self) -> None:
         """Initialize the BanditCLI application.
@@ -544,10 +552,10 @@ class BanditCLIApp(App):
 
         # ASCII Art Title
         ascii_title = r"""
-  ____                  _ _ _    ____ _     ___ 
+  ____                  _ _ _    ____ _     ___
  | __ )  __ _ _ __   __| (_) |_ / ___| |   |_ _|
- |  _ \ / _` | '_ \ / _` | | __| |   | |    | | 
- | |_) | (_| | | | | (_| | | |_| |___| |___ | | 
+ |  _ \ / _` | '_ \ / _` | | __| |   | |    | |
+ | |_) | (_| | | | | (_| | | |_| |___| |___ | |
  |____/ \__,_|_| |_|\__,_|_|\__|\____|_____|___|
 """
         terminal.append_text(ascii_title + "\n", scroll_to_bottom=False)
@@ -620,6 +628,12 @@ class BanditCLIApp(App):
         Args:
             event: The key event containing the pressed key information.
         """
+        # CRITICAL FIX: If an input or text area widget is focused, do NOT intercept keys.
+        # This prevents characters typed into the command input box from being
+        # sent directly to Paramiko by this global handler.
+        if isinstance(self.focused, (Input, TextArea)):
+            return
+
         # Handle command history navigation when not connected to SSH
         if not self.ssh_connected:
             if event.key == "up":
@@ -671,15 +685,9 @@ class BanditCLIApp(App):
                 connection.send_command("\x1b[5~")  # Page up
             elif event.key == "pagedown":
                 connection.send_command("\x1b[6~")  # Page down
-            elif event.key == "tab":
-                connection.send_command("\t")  # Tab
             elif event.character:
                 # Regular character input
                 connection.send_command(event.character)
-                # Add to command history if it's a complete command (Enter key)
-                if event.character == "\n":
-                    # This would be handled by SSH output callback
-                    pass
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle input submission events.
@@ -702,14 +710,6 @@ class BanditCLIApp(App):
         Validates user input, establishes an SSH connection to the OverTheWire
         Bandit server, and sets up the output callback for terminal display.
         Handles connection errors and provides user feedback.
-
-        Security Considerations:
-            - Hostname validation prevents injection attacks (alphanumeric, dots, hyphens only)
-            - Port validation ensures valid range (1-65535) and prevents port scanning
-            - Timeout validation prevents resource exhaustion (1-300 seconds)
-            - Input validation prevents malformed data from reaching SSH layer
-            - Rate limiting prevents brute force attacks via SSHManager
-            - Host key verification enabled by default to prevent MITM attacks
         """
         self.loading = True
 
@@ -952,11 +952,7 @@ class BanditCLIApp(App):
                             self._detect_level_progression(cmd)
 
     def clear_conversation_history(self) -> None:
-        """Clear conversation history for current session.
-
-        Args:
-            None
-        """
+        """Clear conversation history for current session."""
         if self.session_id in self.ai_mentor.conversation_history:
             del self.ai_mentor.conversation_history[self.session_id]
             self.notify("Conversation history cleared", severity="information")
@@ -1168,10 +1164,6 @@ Press Ctrl+Shift+C to clear all caches and metrics."""
 
         Returns:
             None: Always returns None.
-
-        Examples:
-            app.action_switch_tab('terminal')
-            app.action_switch_tab('level')
         """
         try:
             tabbed = self.query_one(TabbedContent)
@@ -1202,7 +1194,6 @@ Press Ctrl+Shift+C to clear all caches and metrics."""
 
         Resizes the SSH PTY to match the new terminal dimensions,
         accounting for UI elements that reduce available space.
-        Includes safety checks for invalid dimensions and connection status.
 
         Args:
             event: The resize event containing the new dimensions.
@@ -1251,18 +1242,15 @@ Active: {session.is_active}"""
 
     def _navigate_history_up(self) -> None:
         """Navigate up through command history."""
-        # Get current input from terminal (this would need a command input field)
-        # For now, we'll just get the previous command
+        # Get current input from terminal
         previous_cmd = self.command_history.get_previous()
         if previous_cmd:
-            # This would update a command input field
             self.notify(f"Previous: {previous_cmd}", severity="information")
 
     def _navigate_history_down(self) -> None:
         """Navigate down through command history."""
         next_cmd = self.command_history.get_next()
         if next_cmd is not None:
-            # This would update a command input field
             if next_cmd:
                 self.notify(f"Next: {next_cmd}", severity="information")
             else:
@@ -1299,8 +1287,6 @@ Active: {session.is_active}"""
             self.notify("No sessions available", severity="warning")
             return
 
-        # For now, just show available sessions in a notification
-        # In a full implementation, this would show a proper dialog
         session_list = "\n".join(
             [
                 f"{i + 1}. {s.name} ({s.get_display_name()}) - Level {s.current_level}"
@@ -1343,8 +1329,6 @@ Active: {session.is_active}"""
         Args:
             command: The command that was executed.
         """
-        # Simple heuristic to detect level progression
-        # Look for commands that might indicate level completion
         level_indicators = [
             "cat",
             "ls",
@@ -1362,11 +1346,8 @@ Active: {session.is_active}"""
             "bzip2",
         ]
 
-        # If command contains level indicators and we see success patterns
         if any(indicator in command for indicator in level_indicators):
-            # Look for potential level progression in recent output
             if "bandit" in self.terminal_output.lower():
-                # Try to extract current level from terminal output
                 import re
 
                 level_matches = re.findall(r"bandit(\d+)", self.terminal_output.lower())
@@ -1383,36 +1364,30 @@ Active: {session.is_active}"""
                                 severity="information",
                             )
                     except ValueError:
-                        pass  # Ignore invalid level numbers
+                        pass
 
     def _initialize_session(self) -> None:
         """Initialize or restore the active session."""
         try:
-            # Try to get the active session
             active_session = self.session_manager.get_active_session()
 
             if active_session:
-                # Restore session state
                 self.session_id = active_session.session_id
                 self.current_level = active_session.current_level
                 self.update_session_display()
                 self.notify(f"Restored session: {active_session.name}", severity="information")
             else:
-                # Create a default session if none exists
                 sessions = self.session_manager.list_sessions()
                 if sessions:
-                    # Use the most recently used session
                     session = sessions[0]
                     self.session_manager.set_active_session(session.session_id)
                     self.session_id = session.session_id
                     self.current_level = session.current_level
                     self.update_session_display()
                 else:
-                    # Create a new default session
                     self.create_new_session()
         except Exception as e:
             self._handle_error_and_stop_loading(f"Failed to initialize session: {e}")
-            # Create a fallback session
             self.session_id = "default"
             self.current_level = 0
 
@@ -1422,12 +1397,8 @@ Active: {session.is_active}"""
         Args:
             message: Error message to display.
         """
-        # Log error for debugging
         self._log_error(f"Validation error: {message}")
-
-        # Provide actionable feedback based on error type
         user_message = self._get_user_friendly_error_message(message)
-
         self.notify(user_message, severity="error")
         self.loading = False
 
@@ -1437,18 +1408,15 @@ Active: {session.is_active}"""
             import os
             from datetime import datetime
 
-            # Create logs directory if it doesn't exist
             log_dir = os.path.expanduser("~/.bandit_cli/logs")
             os.makedirs(log_dir, exist_ok=True)
 
-            # Create error log file with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             log_file = os.path.join(log_dir, f"errors_{timestamp}.log")
 
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now().isoformat()} - {message}\n")
         except Exception:
-            # Fallback if logging fails
             pass
 
     def _get_user_friendly_error_message(self, technical_message: str) -> str:
@@ -1462,7 +1430,6 @@ Active: {session.is_active}"""
         """
         message_lower = technical_message.lower()
 
-        # Connection-related errors
         if "connection" in message_lower or "network" in message_lower:
             if "timeout" in message_lower:
                 return "🔌 Connection timeout. Check your internet connection and try again."
@@ -1475,7 +1442,6 @@ Active: {session.is_active}"""
             else:
                 return "🔌 Network error. Check your connection and try again."
 
-        # Input validation errors
         elif "invalid" in message_lower or "validation" in message_lower:
             if "username" in message_lower:
                 return "👤 Invalid username. Use only letters, numbers, underscores, and hyphens (3-32 chars)."
@@ -1488,7 +1454,6 @@ Active: {session.is_active}"""
             else:
                 return "❌ Invalid input. Please check your input and try again."
 
-        # File/system errors
         elif "file" in message_lower or "not found" in message_lower:
             if "permission" in message_lower:
                 return "🔒 Permission denied. Check file permissions and try running with appropriate access."
@@ -1499,7 +1464,6 @@ Active: {session.is_active}"""
                     "📄 File error. Check if the file exists and you have permission to access it."
                 )
 
-        # AI/mentor errors
         elif "ai" in message_lower or "mentor" in message_lower:
             if "api" in message_lower or "key" in message_lower:
                 return "🤖 AI service unavailable. Check your API key and internet connection."
@@ -1508,7 +1472,6 @@ Active: {session.is_active}"""
             else:
                 return "🧠 AI mentor error. Try again or check your configuration."
 
-        # Default fallback
         return f"❌ Error: {technical_message}. Please try again or check the documentation."
 
 

@@ -13,7 +13,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from textual.binding import Binding
 from textual.widgets import TextArea
@@ -241,12 +241,12 @@ class VirtualScrollingTextArea(TextArea):
         if self.text != display_text:
             self.load_text(display_text)
 
-    def scroll_up(self, lines: int = 10) -> None:
+    def scroll_up(self, lines: int = 10, **kwargs: Any) -> None:
         """Scroll up by specified number of lines."""
         self._visible_start = max(0, self._visible_start - lines)
         self._update_display()
 
-    def scroll_down(self, lines: int = 10) -> None:
+    def scroll_down(self, lines: int = 10, **kwargs: Any) -> None:
         """Scroll down by specified number of lines."""
         max_start = max(0, self._total_lines - self._visible_count)
         self._visible_start = min(max_start, self._visible_start + lines)
@@ -322,7 +322,7 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
         """Open search dialog."""
         # This would open a search input dialog
         # For now, we'll just show a notification
-        self.app.notify("Press Ctrl+F to search (implementation pending)", severity="info")
+        self.app.notify("Press Ctrl+F to search (implementation pending)", severity="information")
 
     def action_search_next(self) -> None:
         """Go to next search result."""
@@ -333,7 +333,7 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
             self.scroll_to_visible()
             self.app.notify(
                 f"Result {self.search.current_result_index + 1}/{len(self.search.search_results)}",
-                severity="info",
+                severity="information",
             )
         else:
             self.app.notify("No search results", severity="warning")
@@ -347,7 +347,7 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
             self.scroll_to_visible()
             self.app.notify(
                 f"Result {self.search.current_result_index + 1}/{len(self.search.search_results)}",
-                severity="info",
+                severity="information",
             )
         else:
             self.app.notify("No search results", severity="warning")
@@ -366,7 +366,7 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
             with open(export_path, "w", encoding="utf-8") as f:
                 f.write(self.buffer.get_text())
 
-            self.app.notify(f"Terminal output exported to {export_path}", severity="success")
+            self.app.notify(f"Terminal output exported to {export_path}", severity="information")
         except Exception as e:
             self.app.notify(f"Failed to export terminal output: {e}", severity="error")
 
@@ -383,7 +383,7 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
     def action_clear(self) -> None:
         """Clear the terminal output."""
         self.clear()
-        self.app.notify("Terminal output cleared", severity="info")
+        self.app.notify("Terminal output cleared", severity="information")
 
     def get_buffer_stats(self) -> Dict[str, int]:
         """Get buffer statistics."""
@@ -406,13 +406,13 @@ class OutputSearchDialog:
         """Show the search dialog."""
         # This would implement a proper search dialog
         # For now, we'll use a simple approach with notifications
-        self.terminal.app.notify("Search dialog - implementation pending", severity="info")
+        self.terminal.app.notify("Search dialog - implementation pending", severity="information")
 
     def perform_search(self, term: str, case_sensitive: bool = False) -> None:
         """Perform the search."""
         results = self.terminal.search.search(term, case_sensitive)
         if results > 0:
-            self.terminal.app.notify(f"Found {results} matches for '{term}'", severity="success")
+            self.terminal.app.notify(f"Found {results} matches for '{term}'", severity="information")
             # Go to first result
             self.terminal.action_search_next()
         else:
