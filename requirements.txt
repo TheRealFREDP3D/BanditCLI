@@ -1,9 +1,26 @@
+# Core dependencies for BanditCLI
+# Install with: pip install -r requirements.txt
+
+# Terminal User Interface framework
 textual==0.80.0
+
+# SSH client library
 paramiko==4.0.0
+
+# OpenAI API client (for AI mentor functionality)
 openai==1.99.9
+
+# Unified LLM interface (supports multiple AI providers)
 litellm==1.61.15
+
+# Used for parsing HTML content from Bandit wargame levels
 beautifulsoup4==4.13.4
+
+# HTTP library for making requests to fetch level content
 requests==2.32.4
+
+# Environment variable management
 python-dotenv==1.0.1
-pytest==8.2.0
-pytest-cov==5.0.0
+
+# System monitoring for performance tracking
+psutil==6.1.0

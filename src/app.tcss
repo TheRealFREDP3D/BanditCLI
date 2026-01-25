@@ -1,4 +1,4 @@
-/* App styling */
+/* App styling with improved visual hierarchy */
 Screen {
     background: $background;
 }
@@ -10,53 +10,100 @@ Header {
     height: 3;
 }
 
+/* Connection status bar styling */
+#connection-status-bar {
+    height: auto;
+    margin: 0 0 1 0;
+    padding: 1 0;
+    background: $surface;
+    border-bottom: solid $secondary;
+}
+
+#connection_status {
+    margin: 0 1;
+    padding: 0 1;
+    text-style: bold;
+}
+
 /* Terminal output styling */
 #terminal_output {
-    height: 80%;
+    height: 1fr;
     border: solid $secondary;
     background: $surface;
+    scrollbar-background: $background;
+    scrollbar-color: $primary;
+    margin: 0 0 1 0;
 }
 
-/* SSH input styling */
-#ssh_username, #ssh_password, #ssh_port {
-    width: 15%;
-    margin: 1 0;
+/* Enhanced terminal output specific styling */
+EnhancedTerminalOutput {
+    height: 1fr;
+    border: solid $secondary;
+    background: $surface;
+    scrollbar-background: $background;
+    scrollbar-color: $primary;
+    margin: 0 0 1 0;
+    padding: 1;
 }
 
-#ssh_connect, #ssh_disconnect {
-    width: 10%;
-    margin: 1 0;
+EnhancedTerminalOutput:focus {
+    border: solid $accent;
+}
+
+
+/* Command input container styling */
+#command-input-container {
+    height: auto;
+    margin: 0 0 1 0;
+    padding: 1 0;
+    background: $surface;
+    border-top: solid $secondary;
+    border-bottom: solid $secondary;
+}
+
+/* Command input bar styling (for terminal tab) */
+#command-input-bar {
+    height: auto;
+    margin: 0;
+    padding: 1 0;
+    background: $surface;
+    border-top: solid $secondary;
 }
 
 /* Command input styling */
 #command_input {
-    width: 80%;
-    margin: 1 0 1 1;
-    display: block;
+    width: 100%;
+    margin: 0 1;
     background: $surface;
     color: $text;
     border: solid $secondary;
 }
 
 /* Send button styling */
-#send_button {
+#send_command {
     width: 15%;
-    margin: 1 1 1 0;
-    min-width: 80px;
+    margin: 0 1 0 0;
+    min-width: 20;
 }
 
 /* Level info styling */
 #level_info {
-    height: 80%;
+    height: 1fr;
     border: solid $secondary;
     background: $surface;
+    padding: 1;
+    scrollbar-background: $background;
+    scrollbar-color: $primary;
 }
 
 /* Mentor chat styling */
 #mentor_chat {
-    height: 80%;
+    height: 1fr;
     border: solid $secondary;
     background: $surface;
+    padding: 1;
+    scrollbar-background: $background;
+    scrollbar-color: $primary;
 }
 
 /* Mentor input styling */
@@ -69,32 +116,73 @@ Header {
 #mentor_send {
     width: 20%;
     margin: 1 0;
+    min-width: 8;
 }
 /* Button styling */
 Button {
     margin: 1 0;
+    min-height: 3;
 }
 
+Button:hover {
+    background: $primary;
+}
+
+Button:disabled {
+    opacity: 0.5;
+}
+
+
+
+/* SSH controls positioning */
 #ssh-controls {
-    align: left bottom;
+    height: auto;
     margin: 1 0;
+    padding: 1 0;
+    background: $surface;
+    border-top: solid $secondary;
+    border-bottom: solid $secondary;
 }
 
-#ssh-controls > Vertical {
-    width: 1fr;
-    margin: 0 1;
-}
-
-#ssh-buttons {
-    padding-top: 1;
-}
-
-#command-controls {
-    align: center middle;
-    dock: bottom;
+#ssh-controls > Horizontal {
     width: 100%;
     height: auto;
-    margin: 1 0 0 0;
+    margin: 0 0 1 0;
+}
+
+/* SSH input field styling */
+#ssh_username, #ssh_password {
+    width: 25%;
+    margin: 0 1;
+    min-width: 15;
+}
+
+#ssh_port, #ssh_timeout {
+    width: 15%;
+    margin: 0 1;
+    min-width: 8;
+}
+
+/* SSH button styling */
+#ssh_connect, #ssh_disconnect {
+    width: 15%;
+    margin: 0 1;
+    min-width: 12;
+}
+
+/* SSH label styling */
+#username-label, #password-label, #port-label, #timeout-label {
+    width: auto;
+    min-width: 8;
+    margin: 0 1 0 0;
+    text-align: right;
+}
+
+/* Command controls positioning */
+#command-controls {
+    height: auto;
+    margin: 0 0 1 0;
+    width: 100%;
     padding: 1 0;
     background: $background;
     border-top: solid $secondary;
@@ -108,11 +196,137 @@ Button {
 #command-controls > Label {
     width: auto;
     margin: 0 1 0 1;
-    min-width: 80px;
+    min-width: 20w;
+}
+
+/* Session controls styling */
+#session-controls {
+    height: auto;
+    margin: 1 0;
+    padding: 1 0;
+    background: $surface;
+    border-top: solid $secondary;
+    border-bottom: solid $secondary;
+}
+
+#session-controls > Label {
+    width: auto;
+    margin: 0 1;
+    min-width: 8;
+}
+
+#session-controls > Button {
+    width: auto;
+    margin: 0 1;
+    min-width: 12;
+}
+
+#current_session_display {
+    width: 1fr;
+    margin: 0 1;
+    padding: 0 1;
+    text-align: left;
 }
 
 /* Label styling */
 Label {
     margin: 1 0;
     width: 10%;
+    text-align: center;
+}
+
+/* Loading indicator styling */
+LoadingIndicator {
+    height: 1;
+    margin: 0 0 1 0;
+    display: none;
+}
+
+LoadingIndicator.visible {
+    display: block;
+}
+
+/* Tab styling */
+TabbedContent > ContentTabs {
+    background: $surface;
+}
+
+TabbedContent > ContentTabs > Tab {
+    padding: 1 2;
+    margin: 0 1 0 0;
+}
+
+TabbedContent > ContentTabs > Tab:hover {
+    background: $primary;
+}
+
+/* Input validation styling */
+Input.-invalid {
+    border: solid red;
+}
+
+Input.-valid {
+    border: solid green;
+}
+
+/* Custom footer styling */
+VersionFooter {
+    height: 1;
+    background: $surface;
+    border-top: solid $secondary;
+}
+
+VersionFooter > Horizontal {
+    height: 100%;
+    align: center middle;
+}
+
+#version-label {
+    margin: 0 1;
+    padding: 0 1;
+    color: $primary;
+    text-style: bold;
+    width: 8;
+}
+
+/* Delete Session Modal */
+DeleteSessionModal {
+    align: center middle;
+}
+
+#delete_dialog {
+    width: 60;
+    height: auto;
+    border: thick $background 80%;
+    background: $surface;
+    padding: 1 2;
+}
+
+#delete_label {
+    width: 100%;
+    text-align: center;
+    margin: 1 0;
+}
+
+#no_sessions_label {
+    width: 100%;
+    text-align: center;
+    margin: 2 0;
+    color: $error;
+}
+
+#session_list {
+    height: 10;
+    border: solid $secondary;
+    margin: 1 0;
+}
+
+#delete_buttons {
+    align: center bottom;
+    height: auto;
+    margin: 1 0;
+}
+
+#delete_buttons > Button {
+    margin: 0 1;
 }

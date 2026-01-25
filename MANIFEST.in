@@ -1,0 +1,6 @@
+include src/bandit_levels.json
+include src/app.tcss
+include src/ai_mentor_data.json
+include README.md
+include LICENSE
+include SECURITY.md
