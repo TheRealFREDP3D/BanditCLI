@@ -16,7 +16,7 @@ import socket
 import threading
 import time
 from collections import defaultdict
-from typing import Callable, Dict, Optional
+from typing import Callable, Optional
 
 import paramiko
 
@@ -428,8 +428,8 @@ class SSHConnectionPool:
             max_connections: Maximum number of concurrent connections.
         """
         self.max_connections = max_connections
-        self._pool: Dict[str, SSHConnection] = {}
-        self._connection_times: Dict[str, float] = {}
+        self._pool: dict[str, SSHConnection] = {}
+        self._connection_times: dict[str, float] = {}
         self._lock = threading.Lock()
         self._cleanup_interval = 300  # 5 minutes
         self._connection_timeout = 1800  # 30 minutes
@@ -555,7 +555,7 @@ class SSHManager:
         Args:
             notify_callback: Callback for status/error notifications.
         """
-        self.connections: Dict[str, SSHConnection] = {}
+        self.connections: dict[str, SSHConnection] = {}
         self.notify = notify_callback
         self._lock = threading.Lock()
         self.connection_pool = SSHConnectionPool(max_connections=5)

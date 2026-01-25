@@ -7,9 +7,9 @@ import tempfile
 from unittest.mock import MagicMock, Mock, patch
 
 # Add the src directory to the path so we can import the modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from level_info import BanditLevelInfo
+from src.level_info import BanditLevelInfo
 
 
 class TestBanditLevelInfo:

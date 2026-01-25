@@ -19,7 +19,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 class Session:
@@ -71,9 +71,9 @@ class Session:
         self.last_used = datetime.now()
         self.connection_count = 0
         self.is_active = False
-        self.metadata: Dict[str, Any] = {}
+        self.metadata: dict[str, Any] = {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert session to dictionary for serialization.
 
         Returns:
@@ -94,7 +94,7 @@ class Session:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Session":
+    def from_dict(cls, data: dict[str, Any]) -> "Session":
         """Create session from dictionary.
 
         Args:
@@ -219,11 +219,11 @@ class SessionManager:
             self.bandit_dir = Path.home() / ".bandit_cli"
             self.bandit_dir.mkdir(exist_ok=True)
 
-            # Set sessions file path
-            self.sessions_file = self.bandit_dir / "sessions.json"
+            if sessions_file is None:
+                self.sessions_file = self.bandit_dir / "sessions.json"
 
         # Initialize sessions storage
-        self.sessions: Dict[str, Session] = {}
+        self.sessions: dict[str, Session] = {}
         self.active_session_id: Optional[str] = None
 
         # Load existing sessions
@@ -496,7 +496,7 @@ class SessionManager:
             self._save_sessions()
             return True
 
-    def list_sessions(self) -> List[Session]:
+    def list_sessions(self) -> list[Session]:
         """Get all sessions.
 
         Returns:
@@ -505,7 +505,7 @@ class SessionManager:
         with self.lock:
             return sorted(self.sessions.values(), key=lambda s: s.last_used, reverse=True)
 
-    def get_session_names(self) -> List[str]:
+    def get_session_names(self) -> list[str]:
         """Get all session names.
 
         Returns:
@@ -547,7 +547,7 @@ class SessionManager:
 
             return len(to_remove)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get session statistics.
 
         Returns:

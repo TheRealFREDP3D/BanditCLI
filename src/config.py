@@ -3,7 +3,7 @@
 import copy
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 class ConfigManager:
@@ -46,7 +46,7 @@ class ConfigManager:
         # Load configuration
         self.config = self.load_config()
 
-    def load_config(self) -> Dict[str, Any]:
+    def load_config(self) -> dict[str, Any]:
         """Load configuration from file.
 
         Loads configuration from the JSON file on disk and merges it with the
@@ -77,7 +77,7 @@ class ConfigManager:
 
         return config
 
-    def _merge_config(self, default: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    def _merge_config(self, default: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
         """Recursively merge two configuration dictionaries.
 
         Deep merges the override dictionary into the default dictionary,

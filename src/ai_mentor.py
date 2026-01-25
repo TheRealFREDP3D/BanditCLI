@@ -12,9 +12,10 @@ ensuring users learn concepts rather than receiving direct solutions.
 import importlib.resources
 import json
 import os
-from typing import Any, Callable, Dict, Generator, List, Optional
+from collections.abc import Generator
+from typing import Any, Callable, Optional
 
-from src.cache import Cache
+from .cache import Cache
 
 try:
     import litellm
@@ -25,7 +26,7 @@ except ImportError:
 
 # Import ConfigManager for configuration management
 try:
-    from src.config import ConfigManager
+    from .config import ConfigManager
 except ImportError:
     ConfigManager = None
 
@@ -74,8 +75,8 @@ class BanditAIMentor:
             config.get("ai.model") if config else os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
         )
         self.data_file_path: str = data_file_path
-        self.level_hints: Dict[str, str] = {}
-        self.command_explanations: Dict[str, str] = {}
+        self.level_hints: dict[str, str] = {}
+        self.command_explanations: dict[str, str] = {}
         self.opt_out = opt_out
         self.cache = Cache(cache_dir=None, default_ttl=3600)  # 1 hour TTL for AI responses
         self._load_data()
@@ -105,7 +106,7 @@ class BanditAIMentor:
         # We can check for a general API key, but since we are defaulting to a local model,
         # we might not need one. For now, we'll assume that if a user wants to use a
         # different model, they will set the appropriate environment variables.
-        self.conversation_history: Dict[str, List[Dict[str, str]]] = {}
+        self.conversation_history: dict[str, list[dict[str, str]]] = {}
 
         # System prompt for the AI mentor
         self.system_prompt = """You are an AI mentor for the OverTheWire Bandit wargame, designed to help beginners learn cybersecurity and Linux command line skills. Your role is to provide guidance, hints, and educational context WITHOUT giving direct solutions.
@@ -170,7 +171,7 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
         user_message: str,
         session_id: str = "default",
         current_level: int = 0,
-        recent_commands: Optional[List[str]] = None,
+        recent_commands: Optional[list[str]] = None,
         terminal_output: str = "",
         stream: bool = True,
     ) -> Generator[str, None, None]:
@@ -360,8 +361,8 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
         self.notify("AI mentor cache cleared", "info")
 
     def get_context_suggestions(
-        self, terminal_output: str, recent_commands: List[str]
-    ) -> List[str]:
+        self, terminal_output: str, recent_commands: list[str]
+    ) -> list[str]:
         """Generate context-aware suggestions based on terminal errors.
 
         Args:
@@ -388,16 +389,16 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
 
         return suggestions
 
-    def get_cache_stats(self) -> Dict:
+    def get_cache_stats(self) -> dict:
         """Get AI mentor cache statistics."""
         return self.cache.get_stats()
 
-    def get_response_with_context(
+    def ask_with_context(
         self,
         level: int,
         question: str,
         terminal_output: str = "",
-        recent_commands: List[str] = None,
+        recent_commands: list[str] = None,
     ) -> str:
         """Get AI response with context-aware suggestions.
 
@@ -424,11 +425,11 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
 
         return response
 
-    def get_response_quality_stats(self) -> Dict:
+    def get_response_quality_stats(self) -> dict:
         """Get response quality statistics.
 
         Returns:
-            Dict: Quality metrics including success rate and response times
+            dict: Quality metrics including success rate and response times
         """
         total = self.response_quality["total_responses"]
         if total == 0:
@@ -450,13 +451,13 @@ Remember: Your goal is to teach and guide, not to solve problems for the user. H
             "avg_response_time": self.response_quality["avg_response_time"],
         }
 
-    def get_enhanced_response_with_quality(
+    def ask_with_quality_indicators(
         self,
         level: int,
         question: str,
         terminal_output: str = "",
-        recent_commands: List[str] | None = None,
-    ) -> Dict[str, Any]:
+        recent_commands: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Get AI response with quality indicators.
 
         Args:

@@ -13,7 +13,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 from textual.binding import Binding
 from textual.widgets import TextArea
@@ -24,7 +24,7 @@ class OutputBuffer:
     """Buffer for managing terminal output with size limits."""
 
     max_lines: int = 10000
-    buffer: List[str] = None
+    buffer: Optional[list[str]] = None
 
     def __post_init__(self) -> None:
         if self.buffer is None:
@@ -81,7 +81,7 @@ class TerminalOutputSearch:
 
     def __init__(self, text_area: TextArea) -> None:
         self.text_area = text_area
-        self.search_results: List[Tuple[int, int, int]] = []  # (line, start_col, end_col)
+        self.search_results: list[tuple[int, int, int]] = []  # (line, start_col, end_col)
         self.current_result_index = 0
         self.search_term = ""
 
@@ -129,7 +129,7 @@ class TerminalOutputSearch:
 
         return len(self.search_results)
 
-    def next_result(self) -> Optional[Tuple[int, int, int]]:
+    def next_result(self) -> Optional[tuple[int, int, int]]:
         """Go to the next search result."""
         if not self.search_results:
             return None
@@ -141,7 +141,7 @@ class TerminalOutputSearch:
 
         return self.search_results[self.current_result_index]
 
-    def previous_result(self) -> Optional[Tuple[int, int, int]]:
+    def previous_result(self) -> Optional[tuple[int, int, int]]:
         """Go to the previous search result."""
         if not self.search_results:
             return None
@@ -159,7 +159,7 @@ class TerminalOutputSearch:
         self.current_result_index = 0
         self.search_term = ""
 
-    def _position_to_line_col(self, text: str, pos: int) -> Tuple[int, int]:
+    def _position_to_line_col(self, text: str, pos: int) -> tuple[int, int]:
         """Convert a position in text to line and column numbers."""
         lines_before = text[:pos].split("\n")
         line = len(lines_before) - 1
@@ -252,7 +252,7 @@ class VirtualScrollingTextArea(TextArea):
         self._visible_start = min(max_start, self._visible_start + lines)
         self._update_display()
 
-    def get_buffer_stats(self) -> Dict[str, int]:
+    def get_buffer_stats(self) -> dict[str, int]:
         """Get buffer statistics for monitoring."""
         return {
             "total_lines": self._total_lines,
@@ -385,7 +385,7 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
         self.clear()
         self.app.notify("Terminal output cleared", severity="information")
 
-    def get_buffer_stats(self) -> Dict[str, int]:
+    def get_buffer_stats(self) -> dict[str, int]:
         """Get buffer statistics."""
         return {
             "lines": self.buffer.size(),

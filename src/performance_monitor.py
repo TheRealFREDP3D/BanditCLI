@@ -19,7 +19,7 @@ import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Optional
 
 import psutil
 
@@ -32,7 +32,7 @@ class PerformanceMetrics:
     cache_hit_rate: float = 0.0
     ssh_connection_time_ms: float = 0.0
     terminal_output_lines: int = 0
-    function_execution_times: Dict[str, float] = field(default_factory=dict)
+    function_execution_times: dict[str, float] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
 
 
@@ -79,7 +79,7 @@ class PerformanceMonitor:
             "function_execution_time_ms": 1000.0,  # Alert if > 1s
         }
         self._lock = threading.Lock()
-        self._function_times: Dict[str, deque] = defaultdict(lambda: deque(maxlen=10))
+        self._function_times: dict[str, deque] = defaultdict(lambda: deque(maxlen=10))
         self._logger = self._setup_logger()
 
     def _setup_logger(self) -> logging.Logger:
@@ -271,7 +271,7 @@ class PerformanceMonitor:
                 timestamp=time.time(),
             )
 
-    def get_recent_alerts(self, count: int = 10) -> List[PerformanceAlert]:
+    def get_recent_alerts(self, count: int = 10) -> list[PerformanceAlert]:
         """Get recent performance alerts.
 
         Args:
@@ -283,7 +283,7 @@ class PerformanceMonitor:
         with self._lock:
             return list(self.alerts)[-count:]
 
-    def get_function_stats(self, function_name: str) -> Dict[str, float]:
+    def get_function_stats(self, function_name: str) -> dict[str, float]:
         """Get statistics for a specific function.
 
         Args:

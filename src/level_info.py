@@ -12,9 +12,9 @@ import importlib.resources
 import json
 import os
 import threading
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Optional
 
-from src.cache import Cache
+from .cache import Cache
 
 
 class BanditLevelInfo:
@@ -45,7 +45,7 @@ class BanditLevelInfo:
         self.notify = notify_callback or self._default_notify
         self.cache = Cache(cache_dir=None, default_ttl=7200)  # 2 hours TTL for level data
         # Lazy loading - don't load all data at startup
-        self._levels_data: Optional[Dict] = None
+        self._levels_data: Optional[dict] = None
         self._load_lock = threading.Lock()
 
     def _default_notify(self, message: str, severity: str = "info") -> None:
@@ -58,7 +58,7 @@ class BanditLevelInfo:
         print(f"[{severity.upper()}] {message}")
 
     @property
-    def levels_data(self) -> Dict:
+    def levels_data(self) -> dict:
         """Lazy-loaded property for level data.
 
         Returns:
@@ -70,7 +70,7 @@ class BanditLevelInfo:
                     self._levels_data = self._load_levels_data()
         return self._levels_data or {}
 
-    def _load_levels_data(self) -> Dict:
+    def _load_levels_data(self) -> dict:
         # Try to load from cache first
         cache_key = f"levels_data_{self.levels_file_path}"
         cached_data = self.cache.get(cache_key)
@@ -83,7 +83,7 @@ class BanditLevelInfo:
         self.cache.set(cache_key, data, ttl=7200)  # Cache for 2 hours
         return data
 
-    def _load_levels_data_from_file(self) -> Dict:
+    def _load_levels_data_from_file(self) -> dict:
         """Load level data from file without caching (internal method)."""
         try:
             # Try to load from the src package first
@@ -109,7 +109,7 @@ class BanditLevelInfo:
             self.notify(f"Invalid JSON in level data file: {e}", "error")
             return self._get_fallback_data()
 
-    def _get_fallback_data(self) -> Dict:
+    def _get_fallback_data(self) -> dict:
         """Provide basic fallback data if level file can't be loaded.
 
         Returns minimal level data for Level 0 to ensure the application
@@ -129,7 +129,7 @@ class BanditLevelInfo:
             }
         }
 
-    def get_level_info(self, level_num: int) -> Optional[Dict]:
+    def get_level_info(self, level_num: int) -> Optional[dict]:
         """Get complete information for a specific level with caching.
 
         Args:
@@ -151,7 +151,7 @@ class BanditLevelInfo:
 
         return level_info
 
-    def get_all_levels(self) -> Dict:
+    def get_all_levels(self) -> dict:
         """Get information for all available levels.
 
         Returns:
@@ -159,7 +159,7 @@ class BanditLevelInfo:
         """
         return self.levels_data
 
-    def get_available_levels(self) -> List[int]:
+    def get_available_levels(self) -> list[int]:
         """Get sorted list of available level numbers.
 
         Returns:
@@ -181,7 +181,7 @@ class BanditLevelInfo:
             return level_info.get("goal", "Level information not available")
         return "Level information not available"
 
-    def get_recommended_commands(self, level_num: int) -> List[str]:
+    def get_recommended_commands(self, level_num: int) -> list[str]:
         """Get recommended commands for a specific level.
 
         Args:
@@ -195,7 +195,7 @@ class BanditLevelInfo:
             return level_info.get("commands", [])
         return []
 
-    def get_reading_materials(self, level_num: int) -> List[Dict[str, str]]:
+    def get_reading_materials(self, level_num: int) -> list[dict[str, str]]:
         """Get reading materials for a specific level.
 
         Args:
@@ -247,7 +247,7 @@ https://overthewire.org/wargames/bandit/"""
 
         return formatted_info
 
-    def _format_level_info_from_data(self, level_num: int, level_info: Dict) -> str:
+    def _format_level_info_from_data(self, level_num: int, level_info: dict) -> str:
         """Format level information from data dictionary (internal method)."""
         formatted_info = f"# Bandit Level {level_num}"
 
@@ -294,7 +294,7 @@ https://overthewire.org/wargames/bandit/"""
 
         return formatted_info
 
-    def search_levels(self, query: str) -> List[int]:
+    def search_levels(self, query: str) -> list[int]:
         """Search levels by goal description or command content.
 
         Performs a case-insensitive search across level goals and recommended

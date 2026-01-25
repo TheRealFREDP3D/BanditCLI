@@ -2,15 +2,13 @@
 
 import json
 import os
-import sys
 import tempfile
 from unittest.mock import MagicMock, Mock, patch
 
-# Add the src directory to the path so we can import the modules
-# sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
 from src.ai_mentor import BanditAIMentor
 
+# Add the src directory to the path so we can import the modules
+# sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 class TestBanditAIMentor:
     """Test cases for the BanditAIMentor class."""
@@ -27,7 +25,7 @@ class TestBanditAIMentor:
         from src.cache import Cache as RealCache
         # Ensure instances created use the temp dir, overriding any cache_dir passed
         self.MockCache.side_effect = lambda *args, **kwargs: RealCache(
-            cache_dir=os.path.join(self.temp_dir, "cache"), 
+            cache_dir=os.path.join(self.temp_dir, "cache"),
             **{k: v for k, v in kwargs.items() if k != "cache_dir"}
         )
 
@@ -176,7 +174,7 @@ class TestBanditAIMentor:
         mock_chunk = Mock()
         mock_chunk.choices = [Mock()]
         mock_chunk.choices[0].delta.content = "Test AI response"
-        
+
         # return_value must be iterable for streaming
         mock_completion.return_value = [mock_chunk]
 
@@ -202,7 +200,7 @@ class TestBanditAIMentor:
             chunk.choices = [Mock()]
             chunk.choices[0].delta.content = char
             chunks.append(chunk)
-            
+
         mock_completion.return_value = chunks
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test_key"}):
@@ -339,26 +337,26 @@ class TestBanditAIMentor:
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test_key"}):
             mentor = BanditAIMentor(self.mock_notify)
-    
+
             # First message
             list(
                 mentor.get_response(
                     user_message="First message", session_id="test_session", current_level=0
                 )
             )
-    
+
             # Second message - should include conversation history
             mock_chunk2 = Mock()
             mock_chunk2.choices = [Mock()]
             mock_chunk2.choices[0].delta.content = "Response 2"
             mock_completion.return_value = [mock_chunk2]
-            
+
             response_chunks = list(
                 mentor.get_response(
                     user_message="Second message", session_id="test_session", current_level=0
                 )
             )
-    
+
             assert response_chunks == ["Response 2"]
         # Verify conversation history was included
         call_args = mock_completion.call_args
@@ -521,7 +519,7 @@ class TestBanditAIMentor:
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test_key"}):
             mentor = BanditAIMentor(self.mock_notify)
-    
+
             # Use very long terminal output
             long_output = "x" * 1000
             list(
@@ -532,13 +530,13 @@ class TestBanditAIMentor:
                     terminal_output=long_output,
                 )
             )
-    
+
             # Verify the call included truncated output
             call_args = mock_completion.call_args
             messages = call_args[1]["messages"]
-    
+
             # Should truncate to 500 characters
             terminal_content = str(messages)
-            # The output should be truncated (500) plus system prompt and other context. 
+            # The output should be truncated (500) plus system prompt and other context.
             # It should definitely be less than full output + system prompt
             assert len(terminal_content) < len(long_output) + 2000

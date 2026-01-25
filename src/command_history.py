@@ -18,7 +18,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
-from typing import List, Optional
+from typing import Optional
 
 
 class CommandHistory:
@@ -50,7 +50,7 @@ class CommandHistory:
             history_file: Optional path to the history file.
         """
         self.max_history_size = max_size if max_size is not None else max_history_size
-        self.history: List[str] = []
+        self.history: list[str] = []
         self.position = -1
         self.lock = Lock()
 
@@ -264,7 +264,7 @@ class CommandHistory:
         with self.lock:
             self.position = len(self.history)
 
-    def search(self, pattern: str, max_results: int = 50) -> List[str]:
+    def search(self, pattern: str, max_results: int = 50) -> list[str]:
         """Search command history for commands matching a pattern.
 
         Supports regex patterns for advanced searching. Returns commands
@@ -306,7 +306,7 @@ class CommandHistory:
 
                 return matches
 
-    def filter_by_prefix(self, prefix: str) -> List[str]:
+    def filter_by_prefix(self, prefix: str) -> list[str]:
         """Filter history by command prefix.
 
         Returns commands that start with the given prefix, most recent first.
@@ -340,7 +340,7 @@ class CommandHistory:
             except OSError:
                 pass
 
-    def get_recent_commands(self, count: int = 10) -> List[str]:
+    def get_recent_commands(self, count: int = 10) -> list[str]:
         """Get the most recent commands from history.
 
         Args:

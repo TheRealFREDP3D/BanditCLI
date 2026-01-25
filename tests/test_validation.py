@@ -5,11 +5,11 @@ import sys
 from unittest.mock import Mock, patch
 
 # Add the src directory to the path so we can import the modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from ai_mentor import BanditAIMentor
-from level_info import BanditLevelInfo
-from ssh_manager import SSHConnection, SSHManager
+from src.ai_mentor import BanditAIMentor
+from src.level_info import BanditLevelInfo
+from src.ssh_manager import SSHConnection, SSHManager
 
 
 class TestInputValidation:
@@ -36,7 +36,7 @@ class TestInputValidation:
 
         for hostname in valid_hostnames:
             # These should not raise exceptions in normal operation
-            with patch("ssh_manager.SSHConnection") as mock_connection_class:
+            with patch("src.ssh_manager.SSHConnection") as mock_connection_class:
                 mock_connection_instance = Mock()
                 mock_connection_class.return_value = mock_connection_instance
                 mock_connection_instance.connect.return_value = True
@@ -60,7 +60,7 @@ class TestInputValidation:
         valid_ports = [22, 2220, 2222, 8080, 9999]
 
         for port in valid_ports:
-            with patch("ssh_manager.SSHConnection") as mock_connection_class:
+            with patch("src.ssh_manager.SSHConnection") as mock_connection_class:
                 mock_connection_instance = Mock()
                 mock_connection_class.return_value = mock_connection_instance
                 mock_connection_instance.connect.return_value = True

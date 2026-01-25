@@ -4,7 +4,7 @@ import hashlib
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 class Cache:
@@ -36,7 +36,7 @@ class Cache:
         self.stats["sets"] = self.stats.get("sets", 0)
         self.stats["clears"] = self.stats.get("clears", 0)
 
-    def _load_stats(self) -> Dict[str, Any]:
+    def _load_stats(self) -> dict[str, Any]:
         """Load cache statistics from file.
 
         Reads the cache statistics JSON file from disk. If the file doesn't exist
@@ -170,7 +170,7 @@ class Cache:
         if cache_file.exists():
             cache_file.unlink()
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> dict:
         """Get cache statistics.
 
         Returns comprehensive cache statistics including hit rate, total requests,

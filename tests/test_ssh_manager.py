@@ -7,9 +7,9 @@ from unittest.mock import Mock, patch
 import paramiko
 
 # Add the src directory to the path so we can import the modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from ssh_manager import SSHConnection, SSHManager
+from src.ssh_manager import SSHConnection, SSHManager
 
 
 class TestSSHManager:
@@ -28,8 +28,8 @@ class TestSSHManager:
         manager = SSHManager(notify_callback=mock_notify)
 
         # Mock the SSHConnection.connect method to return True
-        with patch("ssh_manager.SSHConnection.connect", return_value=True):
-            with patch("ssh_manager.SSHConnection") as mock_connection_class:
+        with patch("src.ssh_manager.SSHConnection.connect", return_value=True):
+            with patch("src.ssh_manager.SSHConnection") as mock_connection_class:
                 mock_connection_instance = Mock()
                 mock_connection_class.return_value = mock_connection_instance
                 mock_connection_instance.connect.return_value = True
@@ -60,8 +60,8 @@ class TestSSHManager:
         manager = SSHManager(notify_callback=mock_notify)
 
         # Mock the SSHConnection.connect method to return False
-        with patch("ssh_manager.SSHConnection.connect", return_value=False):
-            with patch("ssh_manager.SSHConnection") as mock_connection_class:
+        with patch("src.ssh_manager.SSHConnection.connect", return_value=False):
+            with patch("src.ssh_manager.SSHConnection") as mock_connection_class:
                 mock_connection_instance = Mock()
                 mock_connection_class.return_value = mock_connection_instance
                 mock_connection_instance.connect.return_value = False
