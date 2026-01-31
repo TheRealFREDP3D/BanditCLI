@@ -72,6 +72,9 @@ class Session:
         self.connection_count = 0
         self.is_active = False
         self.metadata: dict[str, Any] = {}
+        self.terminal_output_history: list[str] = []
+        self.ai_conversation_history: list[dict[str, str]] = []
+        self.last_active_tab: str = "terminal"
 
     def to_dict(self) -> dict[str, Any]:
         """Convert session to dictionary for serialization.
@@ -91,6 +94,9 @@ class Session:
             "connection_count": self.connection_count,
             "is_active": self.is_active,
             "metadata": self.metadata,
+            "terminal_output_history": self.terminal_output_history,
+            "ai_conversation_history": self.ai_conversation_history,
+            "last_active_tab": self.last_active_tab,
         }
 
     @classmethod
@@ -121,6 +127,9 @@ class Session:
         session.connection_count = data.get("connection_count", 0)
         session.is_active = data.get("is_active", False)
         session.metadata = data.get("metadata", {})
+        session.terminal_output_history = data.get("terminal_output_history", [])
+        session.ai_conversation_history = data.get("ai_conversation_history", [])
+        session.last_active_tab = data.get("last_active_tab", "terminal")
 
         return session
 
@@ -185,6 +194,42 @@ class Session:
             f"Level {self.current_level} | "
             f"Last used: {self.last_used.strftime('%Y-%m-%d %H:%M')}"
         )
+
+    def update_terminal_history(self, output_lines: list[str], max_lines: int = 1000) -> None:
+        """Update terminal output history.
+        
+        Args:
+            output_lines: List of terminal output lines to store.
+            max_lines: Maximum number of lines to keep (keeps most recent).
+        """
+        self.terminal_output_history = output_lines[-max_lines:] if len(output_lines) > max_lines else output_lines
+        self.last_used = datetime.now()
+
+    def update_ai_conversation(self, messages: list[dict[str, str]], max_messages: int = 50) -> None:
+        """Update AI conversation history.
+        
+        Args:
+            messages: List of AI conversation messages with "role" and "content" keys.
+            max_messages: Maximum number of messages to keep (keeps most recent).
+        """
+        self.ai_conversation_history = messages[-max_messages:] if len(messages) > max_messages else messages
+        self.last_used = datetime.now()
+
+    def update_active_tab(self, tab_id: str) -> None:
+        """Update the last active tab.
+        
+        Args:
+            tab_id: The tab ID to set as active.
+            
+        Raises:
+            ValueError: If tab_id is not a valid tab.
+        """
+        valid_tabs = ["terminal", "session", "level", "mentor"]
+        if tab_id not in valid_tabs:
+            raise ValueError(f"Invalid tab_id '{tab_id}'. Must be one of: {valid_tabs}")
+        
+        self.last_active_tab = tab_id
+        self.last_used = datetime.now()
 
 
 class SessionManager:
@@ -470,6 +515,45 @@ class SessionManager:
                 return False
 
             self.sessions[session_id].update_connection_details(hostname, port, username)
+            self._save_sessions()
+            return True
+
+    def update_session_state(
+        self, 
+        session_id: str, 
+        terminal_history: list[str] = None, 
+        ai_history: list[dict[str, str]] = None, 
+        active_tab: str = None
+    ) -> bool:
+        """Update session state including terminal history, AI conversation, and active tab.
+        
+        Args:
+            session_id: The session ID to update.
+            terminal_history: Optional terminal output history to update.
+            ai_history: Optional AI conversation history to update.
+            active_tab: Optional active tab ID to update.
+            
+        Returns:
+            True if successful, False if session not found.
+        """
+        with self.lock:
+            if session_id not in self.sessions:
+                return False
+
+            session = self.sessions[session_id]
+            
+            if terminal_history is not None:
+                session.update_terminal_history(terminal_history)
+            
+            if ai_history is not None:
+                session.update_ai_conversation(ai_history)
+            
+            if active_tab is not None:
+                try:
+                    session.update_active_tab(active_tab)
+                except ValueError:
+                    return False
+            
             self._save_sessions()
             return True
 
