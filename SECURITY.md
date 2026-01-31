@@ -8,11 +8,22 @@ BanditCLI is committed to maintaining a secure educational tool for learning cyb
 
 ## Data Handling and Privacy
 
-### SSH Password Security
+#--------------------------------------------------------------------------------------------------------------------------
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+# SSH Password Security 
+#
+<!NOTE!> By Default the level passwords are not conserved locally after deconnection but what if there is an unwanted disconnection? The player will instantly loose his progression and all his time invested. I personally would not start again and simply stop using the app.<!NOTE!>
+#
+#- **In-memory storage**: SSH passwords are stored in memory only during active sessions (reference `src/ssh_manager.py` lines 62, 202)
+#- **Secure cleanup**: Passwords are overwritten and cleared from memory on disconnect (lines 236-237)
+#- **No persistence**: Passwords are NOT logged or persisted to disk
+#
+TODO: Offer the user to save progression (found passwords). Maybe protect them addding user authentification method
+#
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#-------------------------------------------------------------------------------------------------------------------------
 
-- **In-memory storage**: SSH passwords are stored in memory only during active sessions (reference `src/ssh_manager.py` lines 62, 202)
-- **Secure cleanup**: Passwords are overwritten and cleared from memory on disconnect (lines 236-237)
-- **No persistence**: Passwords are NOT logged or persisted to disk
 - **Configurable host key policy**:
   - Default: Uses `paramiko.RejectPolicy()` with known hosts verification for security (lines 94-100)
   - Optional: Can use `paramiko.AutoAddPolicy()` for educational environments (creates MITM vulnerability)

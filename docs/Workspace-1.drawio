@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?>
+        <mxfile host="codeviz.app" modified="2026-01-27T18:19:52.068Z" agent="CodeViz Exporter" version="14.6.5" type="device">
+          <diagram id="codeviz-diagram" name="System Diagram">
+            <mxGraphModel dx="1000" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+              <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="cliApp" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="banditCLI">
+                  <mxGeometry x="40" y="-87" width="768" height="670" as="geometry"/>
+                </mxCell>
+                <mxCell id="cliApp_label" value="CLI Application" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="banditCLI">
+                  <mxGeometry x="48" y="-79" width="692" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="sshManager" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="banditCLI">
+                  <mxGeometry x="480.375" y="639" width="397" height="268" as="geometry"/>
+                </mxCell>
+                <mxCell id="sshManager_label" value="SSH Manager" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="banditCLI">
+                  <mxGeometry x="488.375" y="647" width="321" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="aiMentor" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="banditCLI">
+                  <mxGeometry x="837.375" y="582.5" width="463" height="381" as="geometry"/>
+                </mxCell>
+                <mxCell id="aiMentor_label" value="AI Mentor" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="banditCLI">
+                  <mxGeometry x="845.375" y="590.5" width="387" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="levelDataManager" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="banditCLI">
+                  <mxGeometry x="44.125" y="573" width="476" height="405" as="geometry"/>
+                </mxCell>
+                <mxCell id="levelDataManager_label" value="Level Data Manager" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="banditCLI">
+                  <mxGeometry x="52.125" y="581" width="400" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="player_progression_saving.cv::cliApp" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="player_progression_saving.cv::banditCLI">
+                  <mxGeometry x="567.75" y="-187" width="458" height="399" as="geometry"/>
+                </mxCell>
+                <mxCell id="player_progression_saving.cv::cliApp_label" value="**CLI Application**" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="player_progression_saving.cv::banditCLI">
+                  <mxGeometry x="575.75" y="-179" width="382" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="player_progression_saving.cv::sshManager" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="player_progression_saving.cv::banditCLI">
+                  <mxGeometry x="695.25" y="267.5" width="397" height="267" as="geometry"/>
+                </mxCell>
+                <mxCell id="player_progression_saving.cv::sshManager_label" value="**SSH Manager**" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="player_progression_saving.cv::banditCLI">
+                  <mxGeometry x="703.25" y="275.5" width="321" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="player_progression_saving.cv::aiMentor" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="player_progression_saving.cv::banditCLI">
+                  <mxGeometry x="1052.25" y="211.5" width="462" height="379" as="geometry"/>
+                </mxCell>
+                <mxCell id="player_progression_saving.cv::aiMentor_label" value="**AI Mentor**" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="player_progression_saving.cv::banditCLI">
+                  <mxGeometry x="1060.25" y="219.5" width="386" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="player_progression_saving.cv::levelDataManager" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="player_progression_saving.cv::banditCLI">
+                  <mxGeometry x="259" y="202" width="476" height="403" as="geometry"/>
+                </mxCell>
+                <mxCell id="player_progression_saving.cv::levelDataManager_label" value="**Level Data Manager**" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="player_progression_saving.cv::banditCLI">
+                  <mxGeometry x="267" y="210" width="400" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="banditCLI" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="base-diagram-group">
+                  <mxGeometry x="1546.25" y="150" width="1300" height="1160" as="geometry"/>
+                </mxCell>
+                <mxCell id="banditCLI_label" value="BanditCLI" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="base-diagram-group">
+                  <mxGeometry x="1554.25" y="158" width="1224" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="player_progression_saving.cv::banditCLI" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="__uml__player_progression_saving.cv">
+                  <mxGeometry x="251" y="163" width="1295" height="887" as="geometry"/>
+                </mxCell>
+                <mxCell id="player_progression_saving.cv::banditCLI_label" value="**BanditCLI**" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="__uml__player_progression_saving.cv">
+                  <mxGeometry x="259" y="171" width="1219" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="player_progression_saving.cv::player_progression_saving.cv::bandit_cli" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="__uml__player_progression_saving.cv">
+                  <mxGeometry x="978" y="-79" width="398" height="257" as="geometry"/>
+                </mxCell>
+                <mxCell id="player_progression_saving.cv::player_progression_saving.cv::bandit_cli_label" value="**BanditCLI Application**" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="__uml__player_progression_saving.cv">
+                  <mxGeometry x="986" y="-71" width="322" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="player_progression_saving.cv::player_progression_saving.cv::session_manager" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="__uml__player_progression_saving.cv">
+                  <mxGeometry x="303" y="-79" width="398" height="257" as="geometry"/>
+                </mxCell>
+                <mxCell id="player_progression_saving.cv::player_progression_saving.cv::session_manager_label" value="**Session Manager**" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="__uml__player_progression_saving.cv">
+                  <mxGeometry x="311" y="-71" width="322" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="base-diagram-group" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="1">
+                  <mxGeometry x="1526.25" y="12" width="1340" height="1484" as="geometry"/>
+                </mxCell>
+                <mxCell id="base-diagram-group_label" value="Base Diagram" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="1">
+                  <mxGeometry x="1534.25" y="20" width="1264" height="24" as="geometry"/>
+                </mxCell>
+<mxCell id="__uml__player_progression_saving.cv" value="" style="html=1;whiteSpace=wrap;container=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;fillOpacity=20;strokeWidth=2;containerType=none;recursiveResize=0;movable=1;resizable=1;autosize=0;dropTarget=0" vertex="1" parent="1">
+                  <mxGeometry x="12" y="99" width="1554" height="1310" as="geometry"/>
+                </mxCell>
+                <mxCell id="__uml__player_progression_saving.cv_label" value="player_progression_saving.cv" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;labelBackgroundColor=white;spacing=5" vertex="1" parent="1">
+                  <mxGeometry x="20" y="107" width="1478" height="24" as="geometry"/>
+                </mxCell>
+                <mxCell id="user" value="User" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="base-diagram-group">
+                      <mxGeometry x="431.25" y="60" width="297" height="97" as="geometry"/>
+                    </mxCell>
+<mxCell id="sshServer" value="SSH Server" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="base-diagram-group">
+                      <mxGeometry x="590.625" y="1347" width="297" height="97" as="geometry"/>
+                    </mxCell>
+<mxCell id="aiService" value="AI Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="base-diagram-group">
+                      <mxGeometry x="907.625" y="1347" width="297" height="97" as="geometry"/>
+                    </mxCell>
+<mxCell id="mainCLI" value="Main CLI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="cliApp">
+                      <mxGeometry x="391.25" y="131" width="297" height="97" as="geometry"/>
+                    </mxCell>
+<mxCell id="cliRunner" value="CLI Runner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="cliApp">
+                      <mxGeometry x="295" y="288" width="297" height="342" as="geometry"/>
+                    </mxCell>
+<mxCell id="uiRenderer" value="UI Renderer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="cliApp">
+                      <mxGeometry x="20" y="422.5" width="255" height="73" as="geometry"/>
+                    </mxCell>
+<mxCell id="sshClient" value="SSH Client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="sshManager">
+                      <mxGeometry x="20" y="131" width="297" height="97" as="geometry"/>
+                    </mxCell>
+<mxCell id="mentorLogic" value="Mentor Logic" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="aiMentor">
+                      <mxGeometry x="85.75" y="131" width="297" height="97" as="geometry"/>
+                    </mxCell>
+<mxCell id="dataLoader" value="AI Data Loader" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="aiMentor">
+                      <mxGeometry x="20" y="268" width="279" height="73" as="geometry"/>
+                    </mxCell>
+<mxCell id="levelParser" value="Level Parser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="levelDataManager">
+                      <mxGeometry x="20" y="131" width="297" height="97" as="geometry"/>
+                    </mxCell>
+<mxCell id="infoProvider" value="Info Provider" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="levelDataManager">
+                      <mxGeometry x="99.25" y="268" width="297" height="97" as="geometry"/>
+                    </mxCell>
+<mxCell id="player_progression_saving.cv::mainCLI" value="**Main CLI**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="player_progression_saving.cv::cliApp">
+                      <mxGeometry x="81.25" y="131" width="297" height="96" as="geometry"/>
+                    </mxCell>
+<mxCell id="player_progression_saving.cv::uiRenderer" value="**UI Renderer**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="player_progression_saving.cv::cliApp">
+                      <mxGeometry x="20" y="287" width="255" height="72" as="geometry"/>
+                    </mxCell>
+<mxCell id="player_progression_saving.cv::sshClient" value="**SSH Client**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="player_progression_saving.cv::sshManager">
+                      <mxGeometry x="20" y="131" width="297" height="96" as="geometry"/>
+                    </mxCell>
+<mxCell id="player_progression_saving.cv::mentorLogic" value="**Mentor Logic**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="player_progression_saving.cv::aiMentor">
+                      <mxGeometry x="85" y="131" width="297" height="96" as="geometry"/>
+                    </mxCell>
+<mxCell id="player_progression_saving.cv::dataLoader" value="**AI Data Loader**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="player_progression_saving.cv::aiMentor">
+                      <mxGeometry x="20" y="267" width="278" height="72" as="geometry"/>
+                    </mxCell>
+<mxCell id="player_progression_saving.cv::levelParser" value="**Level Parser**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="player_progression_saving.cv::levelDataManager">
+                      <mxGeometry x="20" y="131" width="297" height="96" as="geometry"/>
+                    </mxCell>
+<mxCell id="player_progression_saving.cv::infoProvider" value="**Info Provider**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="player_progression_saving.cv::levelDataManager">
+                      <mxGeometry x="99.25" y="267" width="297" height="96" as="geometry"/>
+                    </mxCell>
+<mxCell id="player_progression_saving.cv::user" value="**User**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="__uml__player_progression_saving.cv">
+                      <mxGeometry x="649" y="110.5" width="297" height="96" as="geometry"/>
+                    </mxCell>
+<mxCell id="player_progression_saving.cv::sshServer" value="**SSH Server**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="__uml__player_progression_saving.cv">
+                      <mxGeometry x="805" y="1174" width="297" height="96" as="geometry"/>
+                    </mxCell>
+<mxCell id="player_progression_saving.cv::aiService" value="**AI Service**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="__uml__player_progression_saving.cv">
+                      <mxGeometry x="1122" y="1174" width="297" height="96" as="geometry"/>
+                    </mxCell>
+<mxCell id="player_progression_saving.cv::player_progression_saving.cv::player" value="**Player**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5" vertex="1" parent="__uml__player_progression_saving.cv">
+                      <mxGeometry x="20" y="122.5" width="251" height="72" as="geometry"/>
+                    </mxCell>
+                <mxCell id="edge-e-user-mainCLI" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="user" target="mainCLI">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-e-user-mainCLI_label" value="Uses | CLI" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-e-user-mainCLI">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-e-mainCLI-cliRunner" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="mainCLI" target="cliRunner">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-e-mainCLI-cliRunner_label" value="Executes commands via" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-e-mainCLI-cliRunner">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-e-mainCLI-uiRenderer" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="mainCLI" target="uiRenderer">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-e-mainCLI-uiRenderer_label" value="Renders UI via" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-e-mainCLI-uiRenderer">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-e-mainCLI-sshClient" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="mainCLI" target="sshClient">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-e-mainCLI-sshClient_label" value="Manages SSH connections via" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-e-mainCLI-sshClient">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-e-mainCLI-mentorLogic" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="mainCLI" target="mentorLogic">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-e-mainCLI-mentorLogic_label" value="Requests hints from" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-e-mainCLI-mentorLogic">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-e-mainCLI-infoProvider" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="mainCLI" target="infoProvider">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-e-mainCLI-infoProvider_label" value="Retrieves level data from" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-e-mainCLI-infoProvider">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-e-sshClient-sshServer" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="sshClient" target="sshServer">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-e-sshClient-sshServer_label" value="Connects to | SSH Protocol" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-e-sshClient-sshServer">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-e-mentorLogic-dataLoader" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="mentorLogic" target="dataLoader">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-e-mentorLogic-dataLoader_label" value="Loads data from" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-e-mentorLogic-dataLoader">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-e-mentorLogic-aiService" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="mentorLogic" target="aiService">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-e-mentorLogic-aiService_label" value="Queries for | AI Assistance (e.g., API calls)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-e-mentorLogic-aiService">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-e-levelParser-infoProvider" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="levelParser" target="infoProvider">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-e-levelParser-infoProvider_label" value="Provides parsed data to" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-e-levelParser-infoProvider">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-e-levelParser-d:/BACKUP/FRED/PROJECTS/_ACTIVE/__GITHUB-TheRealFredP3D/BanditCLI/src/bandit_levels.json" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="levelParser" target="d:/BACKUP/FRED/PROJECTS/_ACTIVE/__GITHUB-TheRealFredP3D/BanditCLI/src/bandit_levels.json">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-e-levelParser-d:/BACKUP/FRED/PROJECTS/_ACTIVE/__GITHUB-TheRealFredP3D/BanditCLI/src/bandit_levels.json_label" value="Reads | JSON File" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-e-levelParser-d:/BACKUP/FRED/PROJECTS/_ACTIVE/__GITHUB-TheRealFredP3D/BanditCLI/src/bandit_levels.json">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-player_progression_saving.cv::e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="player_progression_saving.cv::user" target="player_progression_saving.cv::mainCLI">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-player_progression_saving.cv::e1_label" value="Uses | CLI" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-player_progression_saving.cv::e1">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-player_progression_saving.cv::e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="player_progression_saving.cv::mainCLI" target="player_progression_saving.cv::uiRenderer">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-player_progression_saving.cv::e2_label" value="Renders UI via" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-player_progression_saving.cv::e2">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-player_progression_saving.cv::e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="player_progression_saving.cv::mainCLI" target="player_progression_saving.cv::sshClient">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-player_progression_saving.cv::e3_label" value="Manages SSH connections via" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-player_progression_saving.cv::e3">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-player_progression_saving.cv::e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="player_progression_saving.cv::mainCLI" target="player_progression_saving.cv::mentorLogic">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-player_progression_saving.cv::e4_label" value="Requests hints from" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-player_progression_saving.cv::e4">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-player_progression_saving.cv::e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="player_progression_saving.cv::mainCLI" target="player_progression_saving.cv::infoProvider">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-player_progression_saving.cv::e5_label" value="Retrieves level data from" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-player_progression_saving.cv::e5">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-player_progression_saving.cv::e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="player_progression_saving.cv::sshClient" target="player_progression_saving.cv::sshServer">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-player_progression_saving.cv::e6_label" value="Connects to | SSH Protocol" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-player_progression_saving.cv::e6">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-player_progression_saving.cv::e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="player_progression_saving.cv::mentorLogic" target="player_progression_saving.cv::dataLoader">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-player_progression_saving.cv::e7_label" value="Loads data from" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-player_progression_saving.cv::e7">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-player_progression_saving.cv::e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="player_progression_saving.cv::mentorLogic" target="player_progression_saving.cv::aiService">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-player_progression_saving.cv::e8_label" value="Queries for | AI Assistance (e.g., API calls)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-player_progression_saving.cv::e8">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+<mxCell id="edge-player_progression_saving.cv::e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#808080;strokeWidth=2;jumpStyle=arc;jumpSize=10;spacing=15;labelBackgroundColor=white;labelBorderColor=none" edge="1" parent="1" source="player_progression_saving.cv::levelParser" target="player_progression_saving.cv::infoProvider">
+                    <mxGeometry relative="1" as="geometry"/>
+                  </mxCell>
+                  <mxCell id="edge-player_progression_saving.cv::e9_label" value="Provides parsed data to" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="edge-player_progression_saving.cv::e9">
+                    <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+                      <mxPoint as="offset"/>
+                    </mxGeometry>
+                  </mxCell>
+              </root>
+            </mxGraphModel>
+          </diagram>
+        </mxfile>
