@@ -8,6 +8,7 @@ BanditCLI is committed to maintaining a secure educational tool for learning cyb
 
 ## Data Handling and Privacy
 
+<<<<<<< HEAD
 #--------------------------------------------------------------------------------------------------------------------------
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #
@@ -24,6 +25,13 @@ TODO: Offer the user to save progression (found passwords). Maybe protect them a
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #-------------------------------------------------------------------------------------------------------------------------
 
+=======
+### SSH Password Security
+
+- **In-memory storage**: SSH passwords are stored in memory only during active sessions (reference `src/ssh_manager.py` lines 62, 202)
+- **Secure cleanup**: Passwords are overwritten and cleared from memory on disconnect (lines 236-237)
+- **No persistence**: Passwords are NOT logged or persisted to disk
+>>>>>>> 6be3a2c628ef45c26c051eaa8287e7ee264bfd30
 - **Configurable host key policy**:
   - Default: Uses `paramiko.RejectPolicy()` with known hosts verification for security (lines 94-100)
   - Optional: Can use `paramiko.AutoAddPolicy()` for educational environments (creates MITM vulnerability)

@@ -14,12 +14,13 @@ import os
 import re
 import time
 from contextlib import suppress
-from typing import Any
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.events import Key
+from textual.timer import Timer
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.validation import Function, ValidationResult
@@ -263,9 +264,84 @@ class BanditCLIApp(App):
         self.ai_generating = reactive(False)
         self.current_input_buffer = ""
 
+        # Auto-save infrastructure
+        self._last_save_time: float = 0
+        self._pending_save: bool = False
+        self._save_timer: Optional[Timer] = None
+        self._save_debounce_seconds: int = 5
+
         # Watch for reactive property changes
         self.watch(self, "ssh_connected", self.watch_ssh_connected)
         self.watch(self, "loading", self.watch_loading)
+
+    def _mark_state_dirty(self) -> None:
+        """Mark session state as dirty and schedule auto-save.
+        
+        Sets the pending save flag and schedules a debounced save timer.
+        Cancels any existing timer to prevent duplicate saves.
+        """
+        self._pending_save = True
+        
+        # Cancel existing timer if active
+        if self._save_timer is not None:
+            self._save_timer.stop()
+            self._save_timer = None
+        
+        # Schedule new timer
+        self._save_timer = self.set_timer(self._save_debounce_seconds, self._auto_save_session_state)
+
+    def _auto_save_session_state(self, force: bool = False) -> None:
+        """Auto-save session state with debouncing.
+        
+        Extracts current terminal history, AI conversation history, and active tab
+        information, then persists it via SessionManager. Handles exceptions
+        gracefully to avoid disrupting user experience.
+        
+        Args:
+            force: If True, bypasses the _pending_save guard to force immediate save.
+        """
+        if not force and not self._pending_save:
+            return
+        
+        try:
+            # Extract terminal history from EnhancedTerminalOutput widget
+            terminal_history = ""
+            try:
+                terminal_widget = self.query_one("#terminal_output", EnhancedTerminalOutput)
+                terminal_history = terminal_widget._virtual_buffer
+            except Exception:
+                # Fallback to regular terminal_output if enhanced widget not available
+                terminal_history = self.terminal_output
+            
+            # Extract AI conversation history
+            ai_history = self.ai_mentor.conversation_history.get(self.session_id, [])
+            
+            # Get active tab ID
+            active_tab = "terminal"  # Default fallback
+            try:
+                tabbed = self.query_one(TabbedContent)
+                active_tab = tabbed.active
+            except Exception:
+                pass
+            
+            # Call SessionManager to update session state
+            self.session_manager.update_session_state(
+                session_id=self.session_id,
+                terminal_history=terminal_history.splitlines(),
+                ai_history=ai_history,
+                active_tab=active_tab
+            )
+            
+            # Update save tracking
+            self._last_save_time = time.time()
+            self._pending_save = False
+            
+        except Exception as e:
+            # Log error but don't disrupt user experience
+            self._log_error(f"Auto-save failed: {e}")
+        finally:
+            # Clear timer reference
+            self._save_timer = None
 
     def _validate_configuration(self) -> None:
         """Validate configuration settings on startup.
@@ -495,9 +571,17 @@ class BanditCLIApp(App):
     def on_unmount(self) -> None:
         """Called when the app is about to exit.
 
-        Performs cleanup operations including cache cleanup.
+        Performs cleanup operations including cache cleanup and final state save.
         """
         try:
+            # Save session state immediately on exit
+            self._auto_save_session_state(force=True)
+            
+            # Cancel any pending save timer
+            if self._save_timer is not None:
+                self._save_timer.stop()
+                self._save_timer = None
+            
             # Clean up expired cache entries
             level_cleanup = self.level_info.cache.cleanup_expired()
             ai_cleanup = self.ai_mentor.cache.cleanup_expired()
@@ -509,7 +593,7 @@ class BanditCLIApp(App):
                 )
         except Exception as e:
             # Don't fail the application exit
-            self.notify(f"Cache cleanup failed on exit: {e}", severity="warning")
+            self.notify(f"Cleanup failed on exit: {e}", severity="warning")
 
     async def _warm_up_cache(self) -> None:
         """Warm up cache for frequently accessed levels (0-5).
@@ -847,6 +931,9 @@ class BanditCLIApp(App):
         Closes the SSH connection and updates the UI state to reflect
         the disconnected status.
         """
+        # Save session state immediately before disconnecting
+        self._auto_save_session_state(force=True)
+        
         self.ssh_manager.disconnect_session(self.session_id)
         self.ssh_connected = False
         self.notify("SSH connection closed", severity="information")
@@ -897,6 +984,9 @@ class BanditCLIApp(App):
             # Scroll terminal to bottom
             terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
             terminal.scroll_to_bottom()
+            
+            # Mark state as dirty for auto-save
+            self._mark_state_dirty()
 
         except Exception as e:
             self.notify(f"Error sending command: {e}", severity="error")
@@ -928,6 +1018,9 @@ class BanditCLIApp(App):
             # Fallback to regular TextArea if enhanced widget is not available
             terminal_output = self.query_one("#terminal_output", TextArea)
             terminal_output.insert(data)
+        
+        # Mark state as dirty for auto-save
+        self._mark_state_dirty()
 
         # Extract commands from output (simple heuristic - lines ending with $ or #)
         lines = data.split("\n")
@@ -1037,6 +1130,9 @@ class BanditCLIApp(App):
             mentor_input.value = ""
             self.loading = False
             self.ai_generating = False
+            
+            # Mark state as dirty for auto-save
+            self._mark_state_dirty()
 
     @track_performance("send_mentor_message")
     def send_mentor_message(self) -> None:
@@ -1071,6 +1167,9 @@ class BanditCLIApp(App):
             self.current_level -= 1
             self.update_level_info()
             self.notify(f"Switched to Level {self.current_level}", severity="information")
+            
+            # Mark state as dirty for auto-save
+            self._mark_state_dirty()
 
     def next_level(self) -> None:
         """Go to the next level.
@@ -1083,6 +1182,9 @@ class BanditCLIApp(App):
             self.current_level += 1
             self.update_level_info()
             self.notify(f"Switched to Level {self.current_level}", severity="information")
+            
+            # Mark state as dirty for auto-save
+            self._mark_state_dirty()
         else:
             self.notify("Already at the highest available level", severity="warning")
 
@@ -1183,6 +1285,10 @@ Press Ctrl+Shift+C to clear all caches and metrics."""
                 return None
 
             tabbed.active = tab_id
+            
+            # Mark state as dirty for auto-save
+            self._mark_state_dirty()
+            
             return None
 
         except Exception as e:
@@ -1356,7 +1462,16 @@ Active: {session.is_active}"""
                         new_level = int(level_matches[-1])  # Get the most recent match
                         if new_level != self.current_level:
                             self.current_level = new_level
-                            self.session_manager.update_session_level(self.session_id, new_level)
+                            # Prepare terminal history as list of lines
+                            terminal_lines = self.terminal_output.strip().split('\n') if self.terminal_output.strip() else []
+                            # Get AI conversation history for current session
+                            ai_history = self.ai_mentor.conversation_history.get(self.session_id, [])
+                            self.session_manager.update_session_level(
+                                self.session_id, 
+                                new_level, 
+                                terminal_history=terminal_lines, 
+                                ai_history=ai_history
+                            )
                             self.update_level_info()
                             self.update_session_display()
                             self.notify(

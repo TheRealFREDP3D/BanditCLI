@@ -40,6 +40,9 @@ class Session:
         connection_count (int): Number of times this session was connected.
         is_active (bool): Whether this session is currently active.
         metadata (Dict[str, Any]): Additional session metadata.
+        terminal_output_history (list[str]): History of terminal output.
+        ai_conversation_history (list[dict[str, str]]): History of AI conversations.
+        last_active_tab (str): The last active tab ID.
     """
 
     def __init__(
@@ -478,12 +481,20 @@ class SessionManager:
             self._save_sessions()
             return True
 
-    def update_session_level(self, session_id: str, level: int) -> bool:
+    def update_session_level(
+        self, 
+        session_id: str, 
+        level: int, 
+        terminal_history: Optional[list[str]] = None, 
+        ai_history: Optional[list[dict[str, str]]] = None
+    ) -> bool:
         """Update the current level for a session.
 
         Args:
             session_id: The session ID to update.
             level: The new current level.
+            terminal_history: Optional terminal output history to update.
+            ai_history: Optional AI conversation history to update.
 
         Returns:
             True if successful, False if session not found.
@@ -493,7 +504,13 @@ class SessionManager:
                 return False
 
             self.sessions[session_id].update_level(level)
-            self._save_sessions()
+            
+            # Update histories if provided
+            if terminal_history is not None or ai_history is not None:
+                self.update_session_state(session_id, terminal_history, ai_history)
+            else:
+                self._save_sessions()
+            
             return True
 
     def update_session_connection(
