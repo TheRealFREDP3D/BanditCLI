@@ -562,8 +562,9 @@ class BanditCLIApp(App):
         # Initialize session management
         self._initialize_session()
 
-        # Run the welcome animation
-        asyncio.create_task(self.run_welcome_animation())
+        # Run the welcome animation only if session has no content
+        if not getattr(self, '_session_has_content', False):
+            asyncio.create_task(self.run_welcome_animation())
 
         # Warm up cache for frequently accessed levels (0-5)
         asyncio.create_task(self._warm_up_cache())
@@ -616,6 +617,10 @@ class BanditCLIApp(App):
     async def run_welcome_animation(self) -> None:
         """Displays the welcome animation with ASCII art and instructions."""
         terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
+        
+        # Early return if terminal already has content (restored from session)
+        if hasattr(terminal, '_virtual_buffer') and terminal._virtual_buffer:
+            return
 
         # False Server Loading
         loading_steps = [
@@ -1421,8 +1426,11 @@ Active: {session.is_active}"""
             session = self.session_manager.get_active_session()
             display_widget = self.query_one("#current_session_display", Static)
             if session:
+                timestamp_str = ""
+                if session.last_used:
+                    timestamp_str = f" | Last saved: {session.last_used.strftime('%Y-%m-%d %H:%M:%S')}"
                 display_widget.update(
-                    f"{session.get_display_name()} | Level {session.current_level}"
+                    f"{session.get_display_name()} | Level {session.current_level}{timestamp_str}"
                 )
             else:
                 display_widget.update("No active session")
@@ -1483,14 +1491,111 @@ Active: {session.is_active}"""
 
     def _initialize_session(self) -> None:
         """Initialize or restore the active session."""
+        session_has_content = False
+        restoration_summary = []
+        
         try:
             active_session = self.session_manager.get_active_session()
 
             if active_session:
                 self.session_id = active_session.session_id
                 self.current_level = active_session.current_level
+                
+                # Restore terminal output history
+                try:
+                    if (hasattr(active_session, 'terminal_output_history') and 
+                        active_session.terminal_output_history and 
+                        isinstance(active_session.terminal_output_history, list)):
+                        
+                        terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
+                        
+                        # Validate and limit terminal history
+                        valid_lines = []
+                        for line in active_session.terminal_output_history[:10000]:  # Limit to 10k lines
+                            if isinstance(line, str):
+                                valid_lines.append(line)
+                        
+                        if valid_lines:
+                            # Update virtual buffer and display
+                            terminal._virtual_buffer = valid_lines
+                            terminal._total_lines = len(valid_lines)
+                            
+                            # Hydrate the terminal widget's buffer property
+                            terminal.buffer.buffer = valid_lines[-terminal.buffer.max_lines:]
+                            
+                            # Update self.terminal_output for exports and AI context
+                            self.terminal_output = '\n'.join(valid_lines)
+                            
+                            # Refresh the display
+                            terminal._update_display()
+                            
+                            restoration_summary.append(f"{len(valid_lines)} terminal lines")
+                            session_has_content = True
+                except Exception as e:
+                    self._log_error(f"Failed to restore terminal output: {e}")
+                
+                # Restore AI conversation history
+                try:
+                    if (hasattr(active_session, 'ai_conversation_history') and 
+                        active_session.ai_conversation_history and 
+                        isinstance(active_session.ai_conversation_history, list)):
+                        
+                        mentor_chat = self.query_one("#mentor_chat", TextArea)
+                        
+                        # Validate and filter conversation history
+                        valid_messages = []
+                        conversation_parts = []
+                        for message in active_session.ai_conversation_history:
+                            if (isinstance(message, dict) and 
+                                'role' in message and 'content' in message):
+                                
+                                role = message.get('role', 'unknown')
+                                content = message.get('content', '')
+                                if role == 'user':
+                                    conversation_parts.append(f"You: {content}")
+                                elif role == 'assistant':
+                                    conversation_parts.append(f"Mentor: {content}")
+                                
+                                # Only add valid messages to the history
+                                if role in ['user', 'assistant'] and content:
+                                    valid_messages.append(message)
+                        
+                        # Sync restored chat text to AI mentor history
+                        if valid_messages:
+                            # Trim to mentor's max length and assign to conversation history
+                            self.ai_mentor.conversation_history[self.session_id] = valid_messages[-10:]  # Default max_history is 10
+                            self.ai_mentor._trim_conversation_history(self.session_id)  # Ensure proper trimming
+                        
+                        if conversation_parts:
+                            formatted_conversation = "\n".join(conversation_parts)
+                            mentor_chat.load_text(formatted_conversation)
+                            restoration_summary.append(f"{len(conversation_parts)} AI messages")
+                except Exception as e:
+                    self._log_error(f"Failed to restore AI conversation: {e}")
+                
+                # Restore active tab
+                try:
+                    if (hasattr(active_session, 'last_active_tab') and 
+                        active_session.last_active_tab and 
+                        isinstance(active_session.last_active_tab, str)):
+                        
+                        valid_tabs = {"terminal", "session", "level", "mentor"}
+                        if active_session.last_active_tab in valid_tabs:
+                            tabbed_content = self.query_one(TabbedContent)
+                            tabbed_content.active = active_session.last_active_tab
+                            restoration_summary.append(f"active tab: {active_session.last_active_tab}")
+                except Exception as e:
+                    self._log_error(f"Failed to restore active tab: {e}")
+                
                 self.update_session_display()
-                self.notify(f"Restored session: {active_session.name}", severity="information")
+                
+                # Show restoration notification
+                if restoration_summary:
+                    timestamp = active_session.last_used.strftime("%Y-%m-%d %H:%M:%S") if active_session.last_used else "unknown time"
+                    summary_text = ", ".join(restoration_summary)
+                    self.notify(f"Session restored from {timestamp} ({summary_text})", severity="information")
+                else:
+                    self.notify(f"Restored session: {active_session.name}", severity="information")
             else:
                 sessions = self.session_manager.list_sessions()
                 if sessions:
@@ -1501,10 +1606,15 @@ Active: {session.is_active}"""
                     self.update_session_display()
                 else:
                     self.create_new_session()
+                    
         except Exception as e:
             self._handle_error_and_stop_loading(f"Failed to initialize session: {e}")
             self.session_id = "default"
             self.current_level = 0
+            session_has_content = False
+            
+        # Store flag for welcome animation decision
+        self._session_has_content = session_has_content
 
     def _handle_error_and_stop_loading(self, message: str) -> None:
         """Handle error with user-friendly feedback and stop loading.
