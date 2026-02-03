@@ -37,6 +37,7 @@ class Session:
         current_level (int): Current Bandit level being attempted.
         created_at (datetime): When the session was created.
         last_used (datetime): When the session was last used.
+        last_saved_at (datetime): When the session was last saved.
         connection_count (int): Number of times this session was connected.
         is_active (bool): Whether this session is currently active.
         metadata (Dict[str, Any]): Additional session metadata.
@@ -72,6 +73,7 @@ class Session:
         self.current_level = current_level
         self.created_at = datetime.now()
         self.last_used = datetime.now()
+        self.last_saved_at = datetime.now()
         self.connection_count = 0
         self.is_active = False
         self.metadata: dict[str, Any] = {}
@@ -94,6 +96,7 @@ class Session:
             "current_level": self.current_level,
             "created_at": self.created_at.isoformat(),
             "last_used": self.last_used.isoformat(),
+            "last_saved_at": self.last_saved_at.isoformat(),
             "connection_count": self.connection_count,
             "is_active": self.is_active,
             "metadata": self.metadata,
@@ -126,6 +129,9 @@ class Session:
         )
         session.last_used = datetime.fromisoformat(
             data.get("last_used", datetime.now().isoformat())
+        )
+        session.last_saved_at = datetime.fromisoformat(
+            data.get("last_saved_at", data.get("last_used", datetime.now().isoformat()))
         )
         session.connection_count = data.get("connection_count", 0)
         session.is_active = data.get("is_active", False)
@@ -429,6 +435,9 @@ class SessionManager:
             )
 
             self.sessions[session.session_id] = session
+            
+            # Set last_saved_at for new session creation
+            session.last_saved_at = datetime.now()
             self._save_sessions()
 
             return session.session_id
@@ -478,6 +487,8 @@ class SessionManager:
             self.sessions[session_id].set_active(True)
             self.active_session_id = session_id
 
+            # Set last_saved_at for session activation
+            self.sessions[session_id].last_saved_at = datetime.now()
             self._save_sessions()
             return True
 
@@ -509,6 +520,8 @@ class SessionManager:
             if terminal_history is not None or ai_history is not None:
                 self.update_session_state(session_id, terminal_history, ai_history)
             else:
+                # Set last_saved_at for level updates
+                self.sessions[session_id].last_saved_at = datetime.now()
                 self._save_sessions()
             
             return True
@@ -532,6 +545,9 @@ class SessionManager:
                 return False
 
             self.sessions[session_id].update_connection_details(hostname, port, username)
+            
+            # Set last_saved_at for connection detail updates
+            self.sessions[session_id].last_saved_at = datetime.now()
             self._save_sessions()
             return True
 
@@ -571,6 +587,9 @@ class SessionManager:
                 except ValueError:
                     return False
             
+            # Update last_saved_at timestamp when session state is saved
+            session.last_saved_at = datetime.now()
+            
             self._save_sessions()
             return True
 
@@ -594,6 +613,8 @@ class SessionManager:
                 return False
 
             del self.sessions[session_id]
+            
+            # Note: No need to set last_saved_at for deleted sessions
             self._save_sessions()
             return True
 

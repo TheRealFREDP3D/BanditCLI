@@ -53,6 +53,64 @@ from .terminal_output import EnhancedTerminalOutput
 load_dotenv()
 
 
+class SessionSwitchModal(ModalScreen[Optional[tuple[str, bool]]]):
+    """Modal screen for switching sessions with restore option."""
+
+    def __init__(self, session_manager: SessionManager) -> None:
+        super().__init__()
+        self.session_manager = session_manager
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="switch_dialog"):
+            yield Label("Switch Session", id="switch_label")
+
+            # Get available sessions
+            sessions = self.session_manager.list_sessions()
+            active_session = self.session_manager.get_active_session()
+            active_id = active_session.session_id if active_session else None
+
+            if not sessions:
+                yield Label("No sessions available.", id="no_sessions_label")
+                yield Button("Cancel", variant="primary", id="cancel_switch")
+            else:
+                options = []
+                for session in sessions:
+                    if session.session_id != active_id:
+                        timestamp_str = ""
+                        if session.last_used:
+                            timestamp_str = f" | Last: {session.last_used.strftime('%m/%d %H:%M')}"
+                        options.append(
+                            (
+                                f"{session.get_display_name()} (Level {session.current_level}){timestamp_str}",
+                                session.session_id,
+                            )
+                        )
+
+                if not options:
+                    yield Label("No other sessions available.", id="no_other_sessions_label")
+                    yield Button("Cancel", variant="primary", id="cancel_switch")
+                else:
+                    yield SelectionList(*options, id="session_list")
+                    with Horizontal(id="switch_buttons"):
+                        yield Button("Restore & Switch", variant="primary", id="restore_switch")
+                        yield Button("Switch Without Restore", id="switch_only")
+                        yield Button("Cancel", id="cancel_switch")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel_switch":
+            self.dismiss(None)
+        elif event.button.id in ["restore_switch", "switch_only"]:
+            selection_list = self.query_one(SelectionList)
+            if not selection_list.selected:
+                self.notify("Please select a session to switch to", severity="warning")
+                return
+
+            # Get selected session ID
+            session_id = list(selection_list.selected)[0]
+            restore_flag = event.button.id == "restore_switch"
+            self.dismiss((session_id, restore_flag))
+
+
 class DeleteSessionModal(ModalScreen[bool]):
     """Modal screen for deleting sessions."""
 
@@ -206,6 +264,7 @@ class BanditCLIApp(App):
         ("c", "show_cache_stats", "Cache Stats"),
         ("ctrl+c", "cancel_operation", "Cancel"),
         ("ctrl+shift+c", "clear_cache", "Clear Cache"),
+        ("ctrl+s", "save_progress", "Save Progress"),
         ("?", "ask_about_last_output", "Ask AI about last output"),
         ("s", "show_session_info", "Session Info"),
         ("n", "new_session", "New Session"),
@@ -335,6 +394,16 @@ class BanditCLIApp(App):
             # Update save tracking
             self._last_save_time = time.time()
             self._pending_save = False
+            
+            # Optional visual feedback for auto-save
+            if not force:  # Only show feedback for auto-saves, not manual saves
+                try:
+                    save_indicator = self.query_one("#last_save_indicator", Static)
+                    save_indicator.update("✓ Auto-saved")
+                    # Clear the indicator after 3 seconds
+                    self.set_timer(3.0, lambda: save_indicator.update(""))
+                except Exception:
+                    pass  # Widget might not be ready
             
         except Exception as e:
             # Log error but don't disrupt user experience
@@ -499,6 +568,12 @@ class BanditCLIApp(App):
                 yield Button("Switch Session", id="switch_session")
                 yield Button("Delete Session", id="delete_session", variant="error")
                 yield Static(id="current_session_display")
+
+            # Progress Management Controls
+            with Horizontal(id="save-controls"):
+                yield Label("[bold]Progress Management[/bold]")
+                yield Button("Save Progress", variant="success", id="save_progress")
+                yield Static("", id="last_save_indicator")
 
     def compose_level_view(self) -> ComposeResult:
         """Compose the level information view.
@@ -707,6 +782,8 @@ class BanditCLIApp(App):
             self.show_session_switch_dialog()
         elif event.button.id == "delete_session":
             self.show_delete_session_dialog()
+        elif event.button.id == "save_progress":
+            self.action_save_progress()
 
     def on_key(self, event: Key) -> None:
         """Handle keyboard events including command history navigation.
@@ -1347,6 +1424,49 @@ Active: {session.is_active}"""
         """Create a new session."""
         self.create_new_session()
 
+    def action_save_progress(self) -> None:
+        """Manually save current session progress.
+        
+        Forces an immediate save of the current session state, bypassing
+        the debouncing mechanism. Provides user feedback on save status.
+        """
+        try:
+            # Check if we have a valid session
+            if not self.session_id or self.session_id == "default":
+                self.notify("No active session to save", severity="warning")
+                return
+            
+            # Verify session exists in session manager
+            active_session = self.session_manager.get_active_session()
+            if not active_session:
+                self.notify("No active session to save", severity="warning")
+                return
+            
+            # Force immediate save
+            self._auto_save_session_state(force=True)
+            
+            # Show success notification with timestamp
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            self.notify(f"Progress saved successfully at {timestamp}", severity="information")
+            
+            # Update session display to refresh timestamp
+            self.update_session_display()
+            
+            # Update last save indicator
+            try:
+                save_indicator = self.query_one("#last_save_indicator", Static)
+                save_indicator.update("✓ Saved")
+                # Clear the indicator after 2 seconds
+                self.set_timer(2.0, lambda: save_indicator.update(""))
+            except Exception:
+                pass  # Widget might not be ready
+                
+        except Exception as e:
+            # Log error and show user-friendly message
+            self._log_error(f"Manual save failed: {e}")
+            self.notify("Failed to save progress", severity="error")
+
     def action_switch_session_dialog(self) -> None:
         """Show session switching dialog."""
         self.show_session_switch_dialog()
@@ -1392,23 +1512,48 @@ Active: {session.is_active}"""
             self.notify(f"Failed to create session: {e}", severity="error")
 
     def show_session_switch_dialog(self) -> None:
-        """Show a dialog to switch sessions."""
-        sessions = self.session_manager.list_sessions()
-        if not sessions:
-            self.notify("No sessions available", severity="warning")
-            return
-
-        session_list = "\n".join(
-            [
-                f"{i + 1}. {s.name} ({s.get_display_name()}) - Level {s.current_level}"
-                for i, s in enumerate(sessions[:5])  # Show first 5 sessions
-            ]
-        )
-
-        self.notify(
-            f"Available sessions:\n{session_list}\n\nUse session number to switch",
-            severity="information",
-        )
+        """Show a dialog to switch sessions with restore option."""
+        
+        def after_switch(result: Optional[tuple[str, bool]]) -> None:
+            if result is None:
+                return  # User cancelled
+            
+            session_id, restore_flag = result
+            
+            try:
+                # Prevent switching to currently active session
+                active_session = self.session_manager.get_active_session()
+                if active_session and session_id == active_session.session_id:
+                    self.notify("Already in this session", severity="information")
+                    return
+                
+                # Switch to the selected session
+                if self.session_manager.set_active_session(session_id):
+                    self.session_id = session_id
+                    
+                    if restore_flag:
+                        # Restore session state
+                        self._initialize_session()
+                        self.notify(f"Switched to session and restored state", severity="information")
+                    else:
+                        # Only update session info without restoring
+                        session = self.session_manager.get_session(session_id)
+                        if session:
+                            self.current_level = session.current_level
+                        self.update_level_info()
+                        self.notify(f"Switched to session without restoring", severity="information")
+                    
+                    # Update UI
+                    self.update_session_display()
+                    
+                else:
+                    self.notify("Failed to switch session", severity="error")
+                    
+            except Exception as e:
+                self.notify(f"Error switching session: {e}", severity="error")
+        
+        # Show the modal dialog
+        self.push_screen(SessionSwitchModal(self.session_manager), after_switch)
 
     def show_delete_session_dialog(self) -> None:
         """Show the delete session dialog."""
@@ -1427,13 +1572,25 @@ Active: {session.is_active}"""
             display_widget = self.query_one("#current_session_display", Static)
             if session:
                 timestamp_str = ""
-                if session.last_used:
-                    timestamp_str = f" | Last saved: {session.last_used.strftime('%Y-%m-%d %H:%M:%S')}"
+                if session.last_saved_at:
+                    timestamp_str = f" | Last saved: {session.last_saved_at.strftime('%Y-%m-%d %H:%M:%S')}"
                 display_widget.update(
                     f"{session.get_display_name()} | Level {session.current_level}{timestamp_str}"
                 )
             else:
                 display_widget.update("No active session")
+                
+            # Update last save indicator
+            try:
+                save_indicator = self.query_one("#last_save_indicator", Static)
+                if session and session.last_saved_at:
+                    # Show a simple saved status
+                    save_indicator.update("✓ Saved")
+                else:
+                    save_indicator.update("⚠ Not saved")
+            except Exception:
+                pass  # Widget might not be ready yet
+                
         except Exception:
             pass  # Widget might not be ready yet
 
