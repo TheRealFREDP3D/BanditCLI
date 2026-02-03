@@ -26,7 +26,7 @@ class Session:
     """Represents a single SSH session with connection details and metadata.
 
     Stores session information including SSH connection parameters, current
-    Bandit level, timestamps, and usage statistics.
+    Bandit level, timestamps, usage statistics, and progress tracking.
 
     Attributes:
         session_id (str): Unique identifier for the session.
@@ -44,6 +44,10 @@ class Session:
         terminal_output_history (list[str]): History of terminal output.
         ai_conversation_history (list[dict[str, str]]): History of AI conversations.
         last_active_tab (str): The last active tab ID.
+        completed_levels (list[int]): List of completed level numbers.
+        time_spent_per_level (dict[int, float]): Time spent on each level in seconds.
+        total_commands_executed (int): Total number of commands executed.
+        level_start_time (Optional[datetime]): When the current level was started.
     """
 
     def __init__(
@@ -80,6 +84,11 @@ class Session:
         self.terminal_output_history: list[str] = []
         self.ai_conversation_history: list[dict[str, str]] = []
         self.last_active_tab: str = "terminal"
+        # Progress tracking fields
+        self.completed_levels: list[int] = []
+        self.time_spent_per_level: dict[int, float] = {}
+        self.total_commands_executed: int = 0
+        self.level_start_time: Optional[datetime] = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert session to dictionary for serialization.
@@ -103,6 +112,9 @@ class Session:
             "terminal_output_history": self.terminal_output_history,
             "ai_conversation_history": self.ai_conversation_history,
             "last_active_tab": self.last_active_tab,
+            "completed_levels": self.completed_levels,
+            "time_spent_per_level": self.time_spent_per_level,
+            "total_commands_executed": self.total_commands_executed,
         }
 
     @classmethod
@@ -139,6 +151,12 @@ class Session:
         session.terminal_output_history = data.get("terminal_output_history", [])
         session.ai_conversation_history = data.get("ai_conversation_history", [])
         session.last_active_tab = data.get("last_active_tab", "terminal")
+        session.completed_levels = data.get("completed_levels", [])
+        session.time_spent_per_level = {
+            int(k): v for k, v in data.get("time_spent_per_level", {}).items()
+        }
+        session.total_commands_executed = data.get("total_commands_executed", 0)
+        session.level_start_time = None
 
         return session
 
@@ -166,6 +184,15 @@ class Session:
         Args:
             level: The new current level.
         """
+        # Check if level is actually changing
+        if level != self.current_level:
+            # Finalize time tracking for previous level if appropriate
+            if self.current_level not in self.completed_levels and self.level_start_time:
+                self.mark_level_complete(self.current_level)
+            
+            # Set start time for new level
+            self.level_start_time = datetime.now()
+        
         self.current_level = level
         self.last_used = datetime.now()
 
@@ -238,6 +265,58 @@ class Session:
             raise ValueError(f"Invalid tab_id '{tab_id}'. Must be one of: {valid_tabs}")
         
         self.last_active_tab = tab_id
+        self.last_used = datetime.now()
+
+    def mark_level_complete(self, level: int) -> None:
+        """Mark a level as completed and track time spent.
+        
+        Args:
+            level: The level number to mark as complete.
+        """
+        if level not in self.completed_levels:
+            self.completed_levels.append(level)
+            self.completed_levels.sort()
+            
+            # Calculate time spent if start time is tracked
+            if self.level_start_time:
+                time_spent = (datetime.now() - self.level_start_time).total_seconds()
+                # Accumulate time if level already has time recorded
+                if level in self.time_spent_per_level:
+                    self.time_spent_per_level[level] += time_spent
+                else:
+                    self.time_spent_per_level[level] = time_spent
+                
+                self.level_start_time = None
+            
+            # Update metadata for quick access
+            self.metadata["last_completed_level"] = level
+            self.metadata["total_completed"] = len(self.completed_levels)
+        
+        self.last_used = datetime.now()
+
+    def get_progress_summary(self) -> dict[str, Any]:
+        """Get a summary of progress statistics.
+        
+        Returns:
+            Dictionary containing progress statistics.
+        """
+        total_time = sum(self.time_spent_per_level.values())
+        completed_count = len(self.completed_levels)
+        avg_time = total_time / completed_count if completed_count > 0 else 0
+        
+        return {
+            "total_levels_completed": completed_count,
+            "completed_levels": sorted(self.completed_levels),
+            "total_time_spent": total_time,
+            "average_time_per_level": avg_time,
+            "total_commands_executed": self.total_commands_executed,
+            "current_level": self.current_level,
+            "completion_percentage": (completed_count / 34) * 100,  # Levels 0-33 = 34 total
+        }
+
+    def increment_command_count(self) -> None:
+        """Increment the total command execution count."""
+        self.total_commands_executed += 1
         self.last_used = datetime.now()
 
 

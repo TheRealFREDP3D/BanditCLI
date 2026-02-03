@@ -14,6 +14,7 @@ import os
 import re
 import time
 from contextlib import suppress
+from datetime import datetime
 from typing import Any, Optional
 
 from dotenv import load_dotenv
@@ -51,6 +52,28 @@ from .terminal_output import EnhancedTerminalOutput
 
 # Load environment variables
 load_dotenv()
+
+
+def format_duration(seconds: float) -> str:
+    """Convert seconds to a readable duration format.
+    
+    Args:
+        seconds: Duration in seconds.
+        
+    Returns:
+        Formatted duration string (e.g., "2h 15m 30s").
+    """
+    if seconds < 60:
+        return f"{seconds:.0f}s"
+    elif seconds < 3600:
+        minutes = int(seconds // 60)
+        remaining_seconds = int(seconds % 60)
+        return f"{minutes}m {remaining_seconds}s"
+    else:
+        hours = int(seconds // 3600)
+        remaining_minutes = int((seconds % 3600) // 60)
+        remaining_seconds = int(seconds % 60)
+        return f"{hours}h {remaining_minutes}m {remaining_seconds}s"
 
 
 class SessionSwitchModal(ModalScreen[Optional[tuple[str, bool]]]):
@@ -1059,6 +1082,11 @@ class BanditCLIApp(App):
 
             # Add to command history
             self.command_history.add_command(command)
+            
+            # Increment command count in session
+            session = self.session_manager.get_active_session()
+            if session:
+                session.increment_command_count()
 
             # Clear the input field
             command_input.value = ""
@@ -1406,6 +1434,15 @@ Press Ctrl+Shift+C to clear all caches and metrics."""
         """Display session information."""
         session = self.session_manager.get_active_session()
         if session:
+            progress = session.get_progress_summary()
+            
+            # Format completed levels display
+            completed_levels_str = ', '.join(map(str, progress['completed_levels'][:10]))
+            if len(progress['completed_levels']) > 10:
+                completed_levels_str += '...'
+            elif not completed_levels_str:
+                completed_levels_str = 'None'
+            
             info = f"""Session Information:
 
 Name: {session.name}
@@ -1415,7 +1452,15 @@ Current Level: {session.current_level}
 Created: {session.created_at.strftime("%Y-%m-%d %H:%M")}
 Last Used: {session.last_used.strftime("%Y-%m-%d %H:%M")}
 Connections: {session.connection_count}
-Active: {session.is_active}"""
+Active: {session.is_active}
+
+--- Progress Statistics ---
+Completed Levels: {progress['total_levels_completed']}
+Levels: {completed_levels_str}
+Total Time: {format_duration(progress['total_time_spent'])}
+Avg Time/Level: {format_duration(progress['average_time_per_level'])}
+Commands Executed: {progress['total_commands_executed']}
+Progress: {progress['completion_percentage']:.1f}%"""
             self.notify(info, severity="information")
         else:
             self.notify("No active session", severity="warning")
@@ -1503,6 +1548,12 @@ Active: {session.is_active}"""
             # Switch to new session
             if self.session_manager.set_active_session(session_id):
                 self.session_id = session_id
+                
+                # Initialize level start time for progress tracking
+                new_session = self.session_manager.get_active_session()
+                if new_session and new_session.level_start_time is None:
+                    new_session.level_start_time = datetime.now()
+                
                 self.update_session_display()
                 self.notify(f"Created new session: {session_id[:8]}...", severity="information")
             else:
@@ -1657,6 +1708,10 @@ Active: {session.is_active}"""
             if active_session:
                 self.session_id = active_session.session_id
                 self.current_level = active_session.current_level
+                
+                # Initialize level start time for progress tracking
+                if not hasattr(active_session, 'level_start_time') or active_session.level_start_time is None:
+                    active_session.level_start_time = datetime.now()
                 
                 # Restore terminal output history
                 try:
