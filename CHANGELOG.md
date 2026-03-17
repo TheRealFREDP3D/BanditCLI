@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Virtual scrolling with 50K line buffer for large terminal outputs
 - Enhanced error handling with user-friendly error messages
 - Legacy file migration system for command history and sessions
-- Comprehensive documentation suite (GEMINI.md, QWEN.md, architecture.md, api.md)
+- Comprehensive documentation suite (architecture.md, api.md)
 - Advanced caching mechanisms with intelligent invalidation
 - Integration test suite for end-to-end validation
 - Input validation framework for enhanced security

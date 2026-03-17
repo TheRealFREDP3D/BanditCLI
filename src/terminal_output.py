@@ -24,7 +24,7 @@ class OutputBuffer:
     """Buffer for managing terminal output with size limits."""
 
     max_lines: int = 10000
-    buffer: Optional[list[str]] = None
+    buffer: list[str] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.buffer is None:
@@ -174,9 +174,9 @@ class VirtualScrollingTextArea(TextArea):
     significantly improving performance with large terminal output.
     """
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self._virtual_buffer = []
+        self._virtual_buffer: list[str] = []
         self._visible_start = 0
         self._visible_count = 100  # Number of lines to render
         self._total_lines = 0
@@ -252,7 +252,7 @@ class VirtualScrollingTextArea(TextArea):
         self._visible_start = min(max_start, self._visible_start + lines)
         self._update_display()
 
-    def get_buffer_stats(self) -> dict[str, int]:
+    def get_buffer_stats(self) -> dict[str, Any]:
         """Get buffer statistics for monitoring."""
         return {
             "total_lines": self._total_lines,
@@ -264,7 +264,7 @@ class VirtualScrollingTextArea(TextArea):
             "usage_percent": (len(self._virtual_buffer) / self._max_buffer_size) * 100,
         }
 
-    def clear(self) -> None:
+    def clear(self) -> Any:  # type: ignore[override]
         """Clear the text area and virtual buffer."""
         self._virtual_buffer.clear()
         self._total_lines = 0
@@ -286,7 +286,7 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
         Binding("shift+f3", "search_previous", "Previous Result"),
     ]
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.buffer = OutputBuffer(max_lines=10000)
         self.ansi_parser = ANSIColorParser()
@@ -330,7 +330,7 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
         if result:
             line, start_col, end_col = result
             self.move_cursor((line, start_col))
-            self.scroll_to_visible()
+            self.scroll_visible()
             self.app.notify(
                 f"Result {self.search.current_result_index + 1}/{len(self.search.search_results)}",
                 severity="information",
@@ -344,7 +344,7 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
         if result:
             line, start_col, end_col = result
             self.move_cursor((line, start_col))
-            self.scroll_to_visible()
+            self.scroll_visible()
             self.app.notify(
                 f"Result {self.search.current_result_index + 1}/{len(self.search.search_results)}",
                 severity="information",
@@ -374,7 +374,7 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
         """Enable or disable auto-scrolling."""
         self.auto_scroll_enabled = enabled
 
-    def clear(self) -> None:
+    def clear(self) -> None:  # type: ignore[override]
         """Clear the terminal output and all buffers."""
         self.buffer.clear()
         self.search.clear_search()
@@ -385,7 +385,7 @@ class EnhancedTerminalOutput(VirtualScrollingTextArea):
         self.clear()
         self.app.notify("Terminal output cleared", severity="information")
 
-    def get_buffer_stats(self) -> dict[str, int]:
+    def get_buffer_stats(self) -> dict[str, Any]:
         """Get buffer statistics."""
         return {
             "lines": self.buffer.size(),
@@ -412,7 +412,9 @@ class OutputSearchDialog:
         """Perform the search."""
         results = self.terminal.search.search(term, case_sensitive)
         if results > 0:
-            self.terminal.app.notify(f"Found {results} matches for '{term}'", severity="information")
+            self.terminal.app.notify(
+                f"Found {results} matches for '{term}'", severity="information"
+            )
             # Go to first result
             self.terminal.action_search_next()
         else:

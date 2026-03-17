@@ -177,12 +177,8 @@ pytest tests/test_config.py::TestConfigManager::test_init_with_default_config
 
 ### Backwards Compatibility
 
-<<<<<<< HEAD
-- Maintain compatibility with Python 3.8+
-=======
 - Maintain compatibility with Python 3.9+
 
->>>>>>> 6be3a2c628ef45c26c051eaa8287e7ee264bfd30
 - Avoid breaking changes to public APIs
 - Deprecate features before removing (with warnings)
 
