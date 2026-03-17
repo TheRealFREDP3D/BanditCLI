@@ -3,13 +3,8 @@
 This module provides thread-safe SSH connection management for the OverTheWire
 Bandit wargame. It includes SSHConnection for individual connections and
 SSHManager for managing multiple sessions.
-
-The SSHConnection class handles individual SSH connections with background
-output reading, while SSHManager provides a centralized interface for managing
-multiple SSH sessions.
 """
 
-# src/ssh_manager.py
 import logging
 import os
 import socket
@@ -20,47 +15,48 @@ from typing import Callable, Optional
 
 import paramiko
 
-# Configure logging
 logging.getLogger("paramiko").setLevel(logging.WARNING)
 
-# Rate limiting configuration
 MAX_ATTEMPTS_PER_MINUTE = 5
 RATE_LIMIT_WINDOW = 60  # seconds
 
-# Global rate limiting storage
-_connection_attempts = defaultdict(list)
+_connection_attempts: dict[str, list[float]] = defaultdict(list)
+_rate_limit_lock = threading.Lock()
+
+
+def _check_rate_limit(identifier: str) -> bool:
+    """Check if connection attempts are rate limited.
+
+    Args:
+        identifier: Unique identifier (hostname:port) for rate limiting.
+
+    Returns:
+        bool: True if allowed, False if rate limited.
+    """
+    current_time = time.time()
+    with _rate_limit_lock:
+        _connection_attempts[identifier] = [
+            t for t in _connection_attempts[identifier] if current_time - t < RATE_LIMIT_WINDOW
+        ]
+        if len(_connection_attempts[identifier]) >= MAX_ATTEMPTS_PER_MINUTE:
+            return False
+        _connection_attempts[identifier].append(current_time)
+        return True
 
 
 class SSHConnection:
     """Thread-safe SSH connection with background output reading.
 
-    This class manages a single SSH connection to a remote server, providing
-    interactive shell functionality with real-time output reading in a separate
-    thread. It handles connection lifecycle, command sending, and graceful
-    disconnection.
-
-    Security Considerations:
-        - Passwords are stored in memory and securely cleared on disconnection
-        - Host key verification is enabled by default to prevent MITM attacks
-        - Connection timeouts prevent hanging connections
-        - Sensitive data is overwritten using bytearray for secure memory clearing
-        - No SSH agent or private key usage to prevent credential leakage
+    The output_callback MUST be set before calling connect(), so the
+    background reader thread can deliver data as soon as it arrives.
 
     Attributes:
         hostname (str): The remote server hostname.
         port (int): The SSH port number.
         username (str): The SSH username.
-        password (str): The SSH password (cleared after disconnection).
-        client (Optional[paramiko.SSHClient]): The Paramiko SSH client.
-        channel (Optional[paramiko.Channel]): The interactive shell channel.
         connected (bool): Connection status flag.
-        output_callback (Optional[Callable[[str], None]]): Callback for output.
-        read_thread (Optional[threading.Thread]): Background output reading thread.
-        stop_reading (bool): Flag to stop the background reading thread.
-        notify (Callable[[str, str], None]): Notification callback for messages.
+        output_callback (Optional[Callable[[str], None]]): Called with output data.
         timeout (int): Connection timeout in seconds.
-        keepalive_interval (int): Keepalive packet interval in seconds.
-        _lock (threading.Lock): Thread safety lock.
     """
 
     def __init__(
@@ -72,17 +68,21 @@ class SSHConnection:
         notify_callback: Callable[[str, str], None],
         timeout: int = 10,
         verify_host_key: bool = True,
+        output_callback: Optional[Callable[[str], None]] = None,
     ) -> None:
-        """Initialize SSH connection parameters.
+        """Initialise SSH connection parameters.
 
         Args:
             hostname: The remote server hostname.
             port: The SSH port number.
             username: The SSH username.
             password: The SSH password.
-            notify_callback: Callback for status/error notifications (message, severity).
+            notify_callback: Callback for status/error notifications.
             timeout: Connection timeout in seconds.
-            verify_host_key: Whether to verify host keys (recommended for security).
+            verify_host_key: Whether to attempt loading system known_hosts.
+            output_callback: Optional callback to receive output immediately.
+                             Can also be set later via set_output_callback()
+                             before connect() is called.
         """
         self.hostname = hostname
         self.port = port
@@ -91,50 +91,39 @@ class SSHConnection:
         self.client: Optional[paramiko.SSHClient] = None
         self.channel: Optional[paramiko.Channel] = None
         self.connected = False
-        self.output_callback: Optional[Callable[[str], None]] = None
+        self.output_callback: Optional[Callable[[str], None]] = output_callback
         self.read_thread: Optional[threading.Thread] = None
         self.stop_reading = False
         self.notify = notify_callback
         self.timeout = timeout
-        self.keepalive_interval = 30  # Send keepalive every 30 seconds
+        self.keepalive_interval = 30
         self.verify_host_key = verify_host_key
         self._lock = threading.Lock()
 
     def connect(self) -> bool:
         """Establish SSH connection with interactive shell.
 
-        Creates and configures the SSH client, connects to the remote server,
-        establishes an interactive shell channel, and starts background output
-        reading. Handles authentication and connection errors gracefully.
+        Set output_callback before calling this if you want output from the
+        very first bytes the server sends (e.g. the login banner).
 
         Returns:
             bool: True if connection was successful, False otherwise.
         """
         try:
             self.client = paramiko.SSHClient()
+            self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-            # Configure host key policy based on security preference
             if self.verify_host_key:
-                # Use AddPolicy for educational environments - adds new hosts to known_hosts
-                self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                # Load known hosts file if it exists
                 try:
                     self.client.load_system_host_keys()
                     self.client.load_host_keys(os.path.expanduser("~/.ssh/known_hosts"))
                 except OSError as e:
                     self.notify(
-                        f"Warning: Could not load known hosts file: {e}. New hosts will be added automatically.",
+                        f"Warning: Could not load known hosts file: {e}. "
+                        "New hosts will be added automatically.",
                         "warning",
                     )
-            else:
-                # Educational: AutoAddPolicy for learning environments (less secure)
-                self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                self.notify(
-                    "WARNING: Using insecure host key policy (AutoAddPolicy). This creates MITM vulnerability.",
-                    "warning",
-                )
 
-            # Connect with retry logic
             max_retries = 3
             retry_delay = 2
 
@@ -146,28 +135,25 @@ class SSHConnection:
                         username=self.username,
                         password=self.password,
                         timeout=self.timeout,
-                        allow_agent=False,  # Don't use SSH agent for security
-                        look_for_keys=False,  # Don't look for private keys
+                        allow_agent=False,
+                        look_for_keys=False,
                     )
-                    break  # Connection successful
+                    break
                 except (paramiko.AuthenticationException, paramiko.SSHException) as e:
                     if attempt == max_retries - 1:
-                        raise  # Re-raise on final attempt
+                        raise
                     self.notify(
-                        f"Connection attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s...",
+                        f"Connection attempt {attempt + 1} failed: {e}. "
+                        f"Retrying in {retry_delay}s...",
                         "warning",
                     )
                     time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
+                    retry_delay *= 2
 
-            # Create interactive shell
             self.channel = self.client.invoke_shell(term="xterm-color", width=80, height=24)
             self.channel.settimeout(0.1)
             self.connected = True
-
-            # Start reading output in background
             self.start_reading()
-
             return True
 
         except (
@@ -180,86 +166,64 @@ class SSHConnection:
             return False
 
     def start_reading(self) -> None:
-        """Start background thread to read SSH output continuously.
-
-        Initializes and starts a daemon thread that continuously reads output
-        from the SSH channel and calls the output callback when data is received.
-        """
+        """Start the background thread that reads SSH output."""
         with self._lock:
-            # Reset the stop flag before starting the thread
             self.stop_reading = False
 
-        # Create and start daemon thread for background output reading
-        # Daemon thread will exit automatically when main program exits
         self.read_thread = threading.Thread(target=self._read_output, daemon=True)
         self.read_thread.start()
 
     def _read_output(self) -> None:
-        """Background thread function to continuously read SSH output with performance optimizations.
-
-        Runs in a separate thread, continuously reading data from the SSH channel
-        and passing it to the output callback. Uses larger buffer size and reduced
-        callback frequency for better performance.
-        """
-        output_buffer = []
+        """Background thread: continuously read SSH output and fire the callback."""
+        output_buffer: list[str] = []
         last_callback_time = time.time()
-        callback_interval = 0.05  # 50ms between callbacks to reduce UI updates
-        buffer_size_limit = 4096  # Larger buffer for better throughput
+        callback_interval = 0.05  # flush at most every 50 ms
+        buffer_size_limit = 4096
 
         while not self.stop_reading and self.connected:
             try:
                 if self.channel:
-                    # Read larger chunks for better performance
                     data = self.channel.recv(buffer_size_limit).decode("utf-8", errors="ignore")
                     if data:
                         output_buffer.append(data)
                         current_time = time.time()
 
-                        # Batch callbacks to reduce UI update frequency
-                        if (
+                        should_flush = (
                             current_time - last_callback_time >= callback_interval
                             or len("".join(output_buffer)) > 8192
-                        ):  # Flush if buffer gets large
-
-                            batched_data = "".join(output_buffer)
+                        )
+                        if should_flush:
+                            batched = "".join(output_buffer)
                             output_buffer.clear()
-
                             if self.output_callback:
-                                self.output_callback(batched_data)
-
+                                self.output_callback(batched)
                             last_callback_time = current_time
+
             except socket.timeout:
-                # Socket timeout is expected when no data is available
-                # Flush any remaining buffered data
+                # Expected when no data is available — flush anything buffered
                 if output_buffer and self.output_callback:
-                    batched_data = "".join(output_buffer)
+                    self.output_callback("".join(output_buffer))
                     output_buffer.clear()
-                    self.output_callback(batched_data)
+                    last_callback_time = time.time()
                 continue
             except OSError as e:
-                # Network-related errors (connection lost, etc.)
                 if not self.stop_reading:
                     self.notify(f"SSH communication error: {type(e).__name__}: {e}", "error")
-                break  # Exit the loop on connection errors
+                break
             except Exception as e:
-                # Catch-all for unexpected errors to prevent thread crashes
                 if not self.stop_reading:
                     self.notify(f"Unexpected SSH error: {type(e).__name__}: {e}", "error")
-                break  # Exit the loop on unexpected errors
+                break
 
-        # Flush any remaining data on exit
+        # Final flush on exit
         if output_buffer and self.output_callback:
-            batched_data = "".join(output_buffer)
-            self.output_callback(batched_data)
+            self.output_callback("".join(output_buffer))
 
     def send_command(self, command: str) -> None:
-        """Send command to SSH session with error handling.
-
-        Sends a command to the interactive shell channel. Validates connection
-        status before sending and handles any transmission errors.
+        """Send a command to the SSH shell.
 
         Args:
-            command: The command to send to the remote shell.
+            command: Raw bytes to send (include \\r\\n for Enter).
         """
         with self._lock:
             if not self.channel or not self.connected:
@@ -274,50 +238,16 @@ class SSHConnection:
                 self.connected = False
 
     def disconnect(self) -> None:
-        """Close SSH connection safely with thread cleanup.
-
-        Performs graceful disconnection by stopping the background reading thread,
-        closing the SSH channel and client, and clearing sensitive data.
-        Handles thread termination timeouts and resource cleanup errors.
-        """
+        """Close the SSH connection and clean up the reader thread."""
         with self._lock:
-            # Signal the background thread to stop reading
             self.stop_reading = True
             self.connected = False
 
-        # Wait for read thread to finish gracefully with timeout
         if self.read_thread and self.read_thread.is_alive():
-            # Give the thread 2 seconds to exit cleanly
-            self.read_thread.join(timeout=2)
-            if self.read_thread.is_alive():
-                # Thread didn't exit gracefully - attempt forced cleanup
-                self.notify(
-                    "Warning: SSH reading thread did not exit gracefully. Attempting resource cleanup.",
-                    "warning",
-                )
-                # Attempt resource cleanup even though thread is still running
-                if self.client:
-                    try:
-                        self.client.close()
-                        self.notify(
-                            "SSH client connection closed due to lingering thread.", "information"
-                        )
-                    except (paramiko.SSHException, OSError) as e:
-                        self.notify(
-                            f"Error during SSH client cleanup: {type(e).__name__}: {e}", "error"
-                        )
-                self.notify(
-                    "Forced thread termination is not supported; resources have been cleaned up.",
-                    "warning",
-                )
-
-        # Close channel and client (may be redundant if already closed above)
-        # This ensures cleanup even if thread handling above failed
-        if self.read_thread:
-            # Second attempt to wait for thread completion
             self.read_thread.join(timeout=2)
             if self.read_thread.is_alive():
                 self.notify("Warning: SSH reading thread did not exit gracefully.", "warning")
+
         if self.channel:
             try:
                 self.channel.close()
@@ -330,37 +260,25 @@ class SSHConnection:
             except (paramiko.SSHException, OSError) as e:
                 self.notify(f"Error closing SSH client: {type(e).__name__}: {e}", "warning")
 
-        # Clear sensitive data securely using bytearray for proper memory overwrite
         if self.password:
             try:
-                # Convert to bytearray for in-place modification
-                # This ensures the original password data is actually overwritten in memory
                 password_bytes = bytearray(self.password.encode("utf-8"))
-                # Overwrite each byte with zeros to clear sensitive data
                 for i in range(len(password_bytes)):
                     password_bytes[i] = 0
-                # Clear the original string reference
                 self.password = ""
-                # Explicitly delete the bytearray to free memory
                 del password_bytes
             except Exception:
-                # Fallback to basic clearing if bytearray approach fails
-                # This is less secure but prevents crashes
-                self.password = " " * len(self.password)
                 self.password = ""
 
     def resize_pty(self, width: int, height: int) -> bool:
-        """Resize the interactive shell PTY.
-
-        This adjusts the remote pseudo-terminal dimensions to match the
-        local UI container.
+        """Resize the remote pseudo-terminal.
 
         Args:
             width: New width in characters.
             height: New height in characters.
 
         Returns:
-            bool: True if resize successful, False otherwise.
+            bool: True if successful, False otherwise.
         """
         with self._lock:
             if not self.channel or not self.connected:
@@ -369,69 +287,31 @@ class SSHConnection:
         try:
             self.channel.resize_pty(width=width, height=height)
             return True
-        except (paramiko.SSHException, OSError) as e:
-            self.notify(f"SSH error during terminal resize: {type(e).__name__}: {e}", "warning")
-            return False
         except Exception as e:
-            self.notify(
-                f"Unexpected error during terminal resize: {type(e).__name__}: {e}", "warning"
-            )
+            self.notify(f"Terminal resize failed: {type(e).__name__}: {e}", "warning")
             return False
 
     def set_output_callback(self, callback: Callable[[str], None]) -> None:
-        """Set the callback function for handling SSH output.
+        """Set (or replace) the output callback.
+
+        Prefer passing the callback to __init__ or setting it before connect()
+        so no early output is lost. This method is still useful for replacing
+        the callback on an already-connected session.
 
         Args:
-            callback: Function to call when SSH output is received.
+            callback: Function called with batched output strings.
         """
         self.output_callback = callback
 
 
-def _check_rate_limit(identifier: str) -> bool:
-    """Check if connection attempts are rate limited.
-
-    Args:
-        identifier: Unique identifier (hostname:port) for rate limiting.
-
-    Returns:
-        bool: True if allowed, False if rate limited.
-    """
-    current_time = time.time()
-
-    # Remove old attempts outside the window
-    _connection_attempts[identifier] = [
-        attempt_time
-        for attempt_time in _connection_attempts[identifier]
-        if current_time - attempt_time < RATE_LIMIT_WINDOW
-    ]
-
-    # Check if under the limit
-    if len(_connection_attempts[identifier]) >= MAX_ATTEMPTS_PER_MINUTE:
-        return False
-
-    # Record this attempt
-    _connection_attempts[identifier].append(current_time)
-    return True
-
-
 class SSHConnectionPool:
-    """Connection pool for managing multiple SSH sessions efficiently.
-
-    Reuses SSH connections when possible to reduce connection overhead
-    and manages connection lifecycle for better performance.
-    """
+    """Reuse SSH connections to reduce connection overhead."""
 
     def __init__(self, max_connections: int = 5) -> None:
-        """Initialize connection pool.
-
-        Args:
-            max_connections: Maximum number of concurrent connections.
-        """
         self.max_connections = max_connections
         self._pool: dict[str, SSHConnection] = {}
         self._connection_times: dict[str, float] = {}
         self._lock = threading.Lock()
-        self._cleanup_interval = 300  # 5 minutes
         self._connection_timeout = 1800  # 30 minutes
 
     def get_connection(
@@ -444,26 +324,30 @@ class SSHConnectionPool:
         notify_callback: Callable[[str, str], None],
         timeout: int = 10,
         verify_host_key: bool = True,
+        output_callback: Optional[Callable[[str], None]] = None,
     ) -> Optional[SSHConnection]:
-        """Get or create a connection from the pool.
+        """Get or create a pooled connection.
+
+        The output_callback is passed through to SSHConnection so it is set
+        before connect() starts the reader thread.
 
         Args:
-            connection_key: Unique key for the connection.
+            connection_key: Cache key for this connection.
             hostname: SSH server hostname.
             port: SSH server port.
             username: SSH username.
             password: SSH password.
-            notify_callback: Callback for notifications.
-            timeout: Connection timeout.
-            verify_host_key: Whether to verify host keys.
+            notify_callback: Callback for status/error notifications.
+            timeout: Connection timeout in seconds.
+            verify_host_key: Whether to load system known_hosts.
+            output_callback: Output handler — set before connect() runs.
 
         Returns:
-            SSHConnection if available/created, None otherwise.
+            SSHConnection if available/created, None if pool is full.
         """
         with self._lock:
             current_time = time.time()
 
-            # Check if we have an existing, valid connection
             if connection_key in self._pool:
                 conn = self._pool[connection_key]
                 if (
@@ -471,23 +355,29 @@ class SSHConnectionPool:
                     and (current_time - self._connection_times[connection_key])
                     < self._connection_timeout
                 ):
-                    # Update last used time
+                    # Update callback in case it changed (e.g. new session)
+                    if output_callback is not None:
+                        conn.output_callback = output_callback
                     self._connection_times[connection_key] = current_time
                     return conn
                 else:
-                    # Connection is stale, remove it
-                    self._remove_connection(connection_key)
+                    self._remove_connection_locked(connection_key)
 
-            # Check if we're at the connection limit
             if len(self._pool) >= self.max_connections:
-                self._cleanup_stale_connections()
-
+                self._cleanup_stale_connections_locked()
                 if len(self._pool) >= self.max_connections:
-                    return None  # Pool is full
+                    return None
 
-            # Create new connection
+            # Pass output_callback to constructor so it's set BEFORE connect()
             conn = SSHConnection(
-                hostname, port, username, password, notify_callback, timeout, verify_host_key
+                hostname,
+                port,
+                username,
+                password,
+                notify_callback,
+                timeout,
+                verify_host_key,
+                output_callback=output_callback,
             )
             if conn.connect():
                 self._pool[connection_key] = conn
@@ -496,65 +386,43 @@ class SSHConnectionPool:
 
             return None
 
-    def _remove_connection(self, connection_key: str) -> None:
-        """Remove a connection from the pool."""
+    def _remove_connection_locked(self, connection_key: str) -> None:
+        """Remove and disconnect a pooled connection (caller holds self._lock)."""
         if connection_key in self._pool:
-            conn = self._pool[connection_key]
+            conn = self._pool.pop(connection_key)
+            self._connection_times.pop(connection_key, None)
             try:
                 conn.disconnect()
             except Exception:
-                pass  # Ignore errors during cleanup
+                pass
 
-            del self._pool[connection_key]
-            if connection_key in self._connection_times:
-                del self._connection_times[connection_key]
-
-    def _cleanup_stale_connections(self) -> None:
-        """Remove stale connections from the pool."""
+    def _cleanup_stale_connections_locked(self) -> None:
+        """Remove connections idle longer than _connection_timeout (caller holds lock)."""
         current_time = time.time()
-        stale_keys = []
-
-        for key, last_used in self._connection_times.items():
-            if current_time - last_used > self._connection_timeout:
-                stale_keys.append(key)
-
-        for key in stale_keys:
-            self._remove_connection(key)
+        stale = [
+            k
+            for k, t in self._connection_times.items()
+            if current_time - t > self._connection_timeout
+        ]
+        for k in stale:
+            self._remove_connection_locked(k)
 
     def close_all(self) -> None:
-        """Close all connections in the pool."""
+        """Close every connection in the pool."""
         with self._lock:
-            keys = list(self._pool.keys())
-            for key in keys:
-                self._remove_connection(key)
+            for key in list(self._pool.keys()):
+                self._remove_connection_locked(key)
 
 
 class SSHManager:
     """Multi-session SSH connection manager.
 
-    This class manages multiple SSH connections simultaneously, providing
-    a centralized interface for creating, accessing, and disconnecting
-    SSH sessions. Thread-safe implementation ensures safe concurrent access.
-
-    Security Considerations:
-        - Rate limiting prevents brute force attacks (max 5 attempts per minute)
-        - Connection identifiers use hostname:port for granular rate limiting
-        - Thread-safe operations prevent race conditions
-        - Automatic cleanup of existing connections prevents resource leaks
-        - All connections inherit security settings from SSHConnection class
-
     Attributes:
-        connections (Dict[str, SSHConnection]): Dictionary of active connections.
-        notify (Callable[[str, str], None]): Notification callback for messages.
-        _lock (threading.Lock): Thread safety lock for connection management.
+        connections (Dict[str, SSHConnection]): Active connections by session ID.
+        notify (Callable[[str, str], None]): Notification callback.
     """
 
     def __init__(self, notify_callback: Callable[[str, str], None]) -> None:
-        """Initialize SSH manager with notification callback and connection pool.
-
-        Args:
-            notify_callback: Callback for status/error notifications.
-        """
         self.connections: dict[str, SSHConnection] = {}
         self.notify = notify_callback
         self._lock = threading.Lock()
@@ -569,105 +437,95 @@ class SSHManager:
         password: str,
         timeout: int = 10,
         verify_host_key: bool = True,
+        output_callback: Optional[Callable[[str], None]] = None,
     ) -> bool:
-        """Create new SSH connection with validation, session management, and connection pooling.
+        """Create a new SSH connection, replacing any existing one for session_id.
 
-        Creates a new SSH connection and stores it in the connections dictionary.
-        Uses connection pool for better resource management. If a connection with the same
-        session_id already exists, it will be disconnected and replaced with the new connection.
+        The output_callback is wired up BEFORE the connection is established so
+        no output (including the login banner) is lost.
 
         Args:
-            session_id: Unique identifier for the SSH session.
-            hostname: The remote server hostname.
-            port: The SSH port number.
-            username: The SSH username.
-            password: The SSH password.
+            session_id: Unique identifier for this session.
+            hostname: SSH server hostname.
+            port: SSH port number.
+            username: SSH username.
+            password: SSH password.
             timeout: Connection timeout in seconds.
-            verify_host_key: Whether to verify host keys (recommended for security).
+            verify_host_key: Whether to load system known_hosts.
+            output_callback: Called on the reader thread with batched output.
+                             The caller is responsible for thread-safe dispatch
+                             (e.g. using app.call_from_thread in Textual).
 
         Returns:
-            bool: True if connection was successful, False otherwise.
+            bool: True if connection succeeded, False otherwise.
         """
-        with self._lock:
-            # Check rate limiting before attempting connection
-            connection_identifier = f"{hostname}:{port}"
-            if not _check_rate_limit(connection_identifier):
-                self.notify(
-                    f"Connection rate limit exceeded for {hostname}:{port}. Please wait before trying again.",
-                    "error",
-                )
-                return False
-
-            # Clean up existing connection
-            if session_id in self.connections:
-                self.disconnect_session(session_id)
-
-            # Try to get connection from pool first
-            connection_key = f"{session_id}:{hostname}:{port}:{username}"
-            conn = self.connection_pool.get_connection(
-                connection_key,
-                hostname,
-                port,
-                username,
-                password,
-                self.notify,
-                timeout,
-                verify_host_key,
+        connection_identifier = f"{hostname}:{port}"
+        if not _check_rate_limit(connection_identifier):
+            self.notify(
+                f"Connection rate limit exceeded for {hostname}:{port}. "
+                "Please wait before trying again.",
+                "error",
             )
-
-            if conn:
-                self.connections[session_id] = conn
-                return True
-
-            # Fallback to direct connection if pool is full
-            connection = SSHConnection(
-                hostname, port, username, password, self.notify, timeout, verify_host_key
-            )
-            if connection.connect():
-                self.connections[session_id] = connection
-                return True
             return False
 
+        # Pop and disconnect any existing connection outside the lock
+        with self._lock:
+            existing = self.connections.pop(session_id, None)
+        if existing is not None:
+            existing.disconnect()
+
+        connection_key = f"{session_id}:{hostname}:{port}:{username}"
+        conn = self.connection_pool.get_connection(
+            connection_key,
+            hostname,
+            port,
+            username,
+            password,
+            self.notify,
+            timeout,
+            verify_host_key,
+            output_callback=output_callback,
+        )
+
+        if conn:
+            with self._lock:
+                self.connections[session_id] = conn
+            return True
+
+        # Fallback: direct connection if pool is full
+        connection = SSHConnection(
+            hostname,
+            port,
+            username,
+            password,
+            self.notify,
+            timeout,
+            verify_host_key,
+            output_callback=output_callback,
+        )
+        if connection.connect():
+            with self._lock:
+                self.connections[session_id] = connection
+            return True
+
+        return False
+
     def get_connection(self, session_id: str) -> Optional[SSHConnection]:
-        """Get SSH connection by session ID.
-
-        Retrieves an existing SSH connection from the connections dictionary.
-
-        Args:
-            session_id: The session identifier to look up.
-
-        Returns:
-            Optional[SSHConnection]: The SSH connection if found, None otherwise.
-        """
+        """Return the active SSHConnection for session_id, or None."""
         with self._lock:
             return self.connections.get(session_id)
 
     def disconnect_session(self, session_id: str) -> None:
-        """Disconnect and remove SSH session.
-
-        Disconnects the SSH connection associated with the given session ID
-        and removes it from the connections dictionary.
-
-        Args:
-            session_id: The session identifier to disconnect.
-        """
+        """Disconnect and remove the connection for session_id."""
         with self._lock:
-            if session_id in self.connections:
-                self.connections[session_id].disconnect()
-                del self.connections[session_id]
+            conn = self.connections.pop(session_id, None)
+        if conn is not None:
+            conn.disconnect()
 
     def disconnect_all(self) -> None:
-        """Disconnect all active SSH sessions and close connection pool.
-
-        Iterates through all active connections and disconnects them.
-        This method is thread-safe and handles concurrent access properly.
-        Also closes all pooled connections.
-        """
+        """Disconnect all active sessions and drain the pool."""
         with self._lock:
             session_ids = list(self.connections.keys())
-
-        for session_id in session_ids:
-            self.disconnect_session(session_id)
-
-        # Close all pooled connections
+        for sid in session_ids:
+            self.disconnect_session(sid)
         self.connection_pool.close_all()

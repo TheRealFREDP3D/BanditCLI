@@ -1,359 +1,124 @@
-# Bandit Wargame CLI
+# BanditCLI
 
-![Header](docs/banner.jpg)
+A terminal interface for the [OverTheWire Bandit](https://overthewire.org/wargames/bandit/)
+wargame with an integrated AI mentor, persistent sessions, and automatic
+level-completion detection.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg) ![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg) ![Version](https://img.shields.io/badge/version-0.2.2-blue.svg)
-
-A terminal-based interface for playing OverTheWire Bandit wargame, built with Python and Textual framework. This CLI application provides a simplified interface for playing challenges, featuring:
-
-## ⚠️ Important Notes
-
-### Level Availability
-
-⚠️ **Level Data Availability**: Currently, only levels 0-5 (6 out of 34 Bandit levels) have full support with detailed goals, commands, and reading materials. For levels 6-33, application will display a message directing you to the [official OverTheWire Bandit website](https://overthewire.org/wargames/bandit/).
-
-### Data Privacy
-
-🔒 **Data Privacy Notice**: When using the AI Mentor, your recent commands (last 5) and terminal output (up to 500 characters) are sent to OpenAI's API for context-aware responses. No passwords or sensitive credentials are intentionally sent, but be aware that command history may contain sensitive information. You can disable the AI Mentor by not setting the `OPENAI_API_KEY` environment variable.
+---
 
 ## Features
 
-### 🖥️ SSH Terminal Interface
+| Feature | Description |
+|---|---|
+| **SSH Terminal** | Full interactive SSH session inside a Textual TUI |
+| **AI Mentor** | GPT-powered hints that guide without giving answers (requires `OPENAI_API_KEY`) |
+| **Level Info** | Built-in goal, commands, and reading materials for all 34 levels |
+| **Session Management** | Create, switch, and persist multiple named sessions |
+| **Command History** | Persistent up/down arrow history across restarts |
+| **Auto Password Detection** | Scans output for Bandit passwords and offers one-click next-level login |
+| **Auto-save** | Debounced background saving of terminal history and AI conversations |
+| **Performance Monitor** | Optional memory and timing metrics via `psutil` |
 
-- Real-time SSH connection to bandit.labs.overthewire.org with configurable port (default 2220)
-- Interactive terminal interface with full terminal emulation
-- Connection status indicators and authentication management
-- Username, password, and port input fields for flexible connection settings
-- Command history navigation with up/down arrow keys
+---
 
-### 📚 Level Information Display
-
-- View level objectives, recommended commands, and learning materials
-- Navigate between different levels
-- Clean, organized presentation
-- Cached for improved performance
-
-### 🤖 AI Mentor System
-
-- OpenAI GPT-3.5 integration for intelligent guidance
-- Context-aware responses based on current level and recent commands
-- Hint system that provides guidance without revealing solutions
-- Interactive chat interface with conversation history
-
-### 📜 Command History
-
-- Persistent command history across sessions
-- Navigate through previous commands with up/down arrow keys
-- Configurable history size limit
-- Automatic deduplication of commands
-
-### 💾 Session Management
-
-- Create and manage multiple sessions
-- Save session information including hostname, port, username, and current level
-- Switch between sessions
-- Persistent session storage
-
-### 🌐 Offline Mode
-
-- Access level information without internet connection
-- Review command history and previous sessions
-- Work with cached level data
-- Toggle offline mode with keyboard shortcut
-
-### ⚡ Performance Optimizations
-
-- Intelligent caching of level information, AI hints, and command explanations
-- File-based cache with expiration
-- Reduced API calls through caching
-
-## Installation
+## Quick Start
 
 ### Prerequisites
 
-- Python 3.8+
-- An OpenAI API key (for AI mentor functionality)
+- Python 3.11+
+- `pip install -r requirements.txt`
 
-### Setup
+### Environment
 
-1. Clone the repository or download the source code
-2. Navigate to the project directory:
+Copy `.env.example` to `.env` and fill in your keys:
+```env
+# Required for AI Mentor
+OPENAI_API_KEY=sk-...
 
-   ```bash
-   cd bandit-cli-app
-   ```
+# Optional: override the default model
+OPENAI_MODEL=gpt-3.5-turbo
 
-3. Create a virtual environment:
+# Optional: disable SSH host-key verification (not recommended)
+BANDIT_CLI_INSECURE=false
+```
 
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-4. Install the required dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-5. (Optional) Install development dependencies for code quality tools:
-
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
-
-6. Set your OpenAI API key as an environment variable:
-
-   ```bash
-   export OPENAI_API_KEY="your-openai-api-key-here"  # On Windows: set OPENAI_API_KEY=your-openai-api-key-here
-   ```
-
-## Usage
-
-After installation, you can run the application with:
-
+### Run
 ```bash
+python -m src.main
+# or, if installed as a package:
 bandit-cli
 ```
 
-Alternatively, you can run the application directly from the source code:
+---
 
-```bash
-python -m src.main
+## How Password Detection Works
+
+1. Every chunk of SSH output is passed through `PasswordDetector.feed()`.
+2. A regex `\b([A-Za-z0-9]{32})\b` scans for 32-character tokens — the format
+   used by all Bandit passwords.
+3. When a new (not-yet-seen) password is found:
+   - It is stored in the active session under `recovered_passwords[current_level]`.
+   - The current level is marked complete.
+   - Progress is force-saved to disk.
+   - A `LevelCompleteModal` appears with the password and a
+     **"Login to Level N →"** button.
+4. Clicking the button disconnects the current SSH session, pre-fills the
+   credentials, and reconnects as `bandit(N+1)` automatically.
+5. The detector resets on every disconnect to avoid stale matches.
+
+A 5-second cooldown between successive detections prevents a single `cat`
+command that echoes the password multiple times from triggering the modal
+more than once.
+
+---
+
+## Project Layout
+```
+src/
+├── __init__.py            # Package version
+├── main.py                # Textual app, PasswordDetector, LevelCompleteModal
+├── ssh_manager.py         # SSHConnection, SSHManager, SSHConnectionPool
+├── session_manager.py     # Session, SessionManager (includes recovered_passwords)
+├── ai_mentor.py           # BanditAIMentor (LiteLLM)
+├── level_info.py          # BanditLevelInfo
+├── terminal_output.py     # EnhancedTerminalOutput, ANSIColorParser
+├── command_history.py     # CommandHistory
+├── config.py              # ConfigManager
+├── cache.py               # File-based Cache
+├── performance_monitor.py # PerformanceMonitor
+├── app.tcss               # Textual CSS
+├── bandit_levels.json     # Level data (goals, commands, reading materials)
+└── ai_mentor_data.json    # Hint and command explanation data
 ```
 
-### Navigation
+---
 
-The application has three main tabs:
+## Configuration
 
-1. **Terminal**: SSH terminal interface for interacting with the Bandit server
-2. **Level Info**: View information about the current Bandit level
-3. **AI Mentor**: Chat with the AI mentor for hints and guidance
+All settings live in `~/.bandit_cli/config.json` and are managed by
+`ConfigManager`. The defaults are:
+```json
+{
+  "ssh":     { "host": "bandit.labs.overthewire.org", "port": 2220, "timeout": 10 },
+  "ui":      { "theme": "dark", "max_recent_commands": 10 },
+  "ai":      { "model": "gpt-3.5-turbo", "max_context_commands": 3, "fallback": true },
+  "history": { "max_commands": 100, "persist": true },
+  "cache":   { "enable": true, "path": "~/.bandit_cli/cache" }
+}
+```
 
-You can switch between tabs using:
-
-- Mouse clicks on the tab headers
-- Keyboard shortcuts: `1` (Terminal), `2` (Level Info), `3` (AI Mentor)
-- The tabbed interface at the top
-
-### SSH Connection
-
-1. In the Terminal tab, enter your Bandit username, password, and port (default 2220)
-2. Click "Connect" to establish an SSH connection to the Bandit server
-3. Once connected, you can enter commands in the terminal input field
-4. Use the "Disconnect" button to close the SSH connection
-
-### Command History
-
-- Use the up/down arrow keys in the command input field to navigate through command history
-- Command history is persistent across sessions
-- History is automatically saved and loaded
-
-### Level Navigation
-
-In the Level Info tab:
-
-- Use the "Previous Level" and "Next Level" buttons to navigate between levels
-- View level goals, recommended commands, and reading materials
-
-### AI Mentor
-
-In the AI Mentor tab:
-
-- Type your question in the input field and press Enter or click "Send"
-- The AI mentor will provide hints and guidance based on the current level and context
-- View the conversation history in the chat display
-
-### Session Management
-
-- Sessions are automatically created and saved when you connect to a server
-- Session information includes hostname, port, username, and current level
-- Sessions persist across application restarts
-
-### Offline Mode
-
-- Press `o` to toggle offline mode
-- In offline mode, you can view level information and review previous sessions
-- SSH connections and AI mentor are disabled in offline mode
-- The application subtitle indicates when offline mode is active
+---
 
 ## Keyboard Shortcuts
 
-- `d`: Toggle dark mode
-- `q`: Quit the application
-- `1`: Switch to Terminal tab
-- `2`: Switch to Level Info tab
-- `3`: Switch to AI Mentor tab
-- `o`: Toggle offline mode
-
-## Project Structure
-
-```
-bandit-cli-app/
-├── src/
-│   ├── main.py              # Main Textual application
-│   ├── ssh_manager.py       # SSH connection management
-│   ├── ai_mentor.py         # AI mentor functionality
-│   ├── level_info.py        # Level information handling
-│   ├── command_history.py   # Command history management
-│   ├── session_manager.py   # Session management
-│   ├── cache.py             # Caching utilities
-│   ├── config.py            # Configuration management
-│   ├── terminal_output.py   # Terminal output handling
-│   ├── app.tcss             # CSS styling for the application
-│   ├── ai_mentor_data.json # AI mentor configuration data
-│   └── bandit_levels.json   # Level data scraped from OverTheWire
-├── tests/                   # Test suite
-├── docs/                    # Documentation
-├── requirements.txt         # Python dependencies
-├── requirements-dev.txt     # Development dependencies
-├── pyproject.toml          # Project configuration
-├── ruff.toml              # Linting configuration
-├── README.md               # This file
-├── LICENSE                 # MIT License
-├── SECURITY.md            # Security documentation
-└── CONTRIBUTING.md        # Contributing guidelines
-```
-
-## Technology Stack
-
-- **Framework**: Textual (Python TUI framework)
-- **SSH Client**: Paramiko for secure connections
-- **AI Integration**: OpenAI API (GPT-3.5)
-- **Data**: JSON file containing scraped level data from OverTheWire
-- **Caching**: File-based caching system for improved performance
-
-## Troubleshooting
-
-### Common Issues and Solutions
-
-#### SSH Connection Fails
-
-- Verify port 2220 is accessible
-- Check your network connection and firewall settings
-- Ensure your credentials are correct
-- Try using a different network if behind a restrictive firewall
-
-#### AI Mentor Not Working
-
-- Verify `OPENAI_API_KEY` is set correctly
-- Check API key validity and billing status
-- Ensure internet connectivity
-- Check [OpenAI's API status](https://status.openai.com/)
-
-#### Command History Not Saving
-
-- Verify write permissions for `~/.bandit_cli/` directory
-- Check available disk space
-- Try restarting the application
-
-#### Terminal Display Issues
-
-- Try resizing your terminal window
-- Check terminal emulator compatibility
-- Ensure your terminal supports UTF-8
-
-#### Level Information Missing
-
-- Note that only levels 0-5 are currently available
-- Visit [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) for other levels
-- Check for application updates that might add more levels
-
-#### Application Won't Start
-
-- Verify Python 3.8+ is installed
-- Check all dependencies are installed: `pip install -r requirements.txt`
-- Look for conflicting packages in your Python environment
-- Check the terminal for specific error messages
-
-For additional help, see [SECURITY.md](SECURITY.md) for security-related issues or open an issue on GitHub.
-
-## Development
-
-### Code Quality Tools
-
-This project uses modern Python code quality tools:
-
-- **Black**: Code formatting (`black src/ tests/`)
-- **Ruff**: Linting and code analysis (`ruff check src/ tests/`)
-- **MyPy**: Type checking (`mypy src/`)
-
-### Development Setup
-
-1. Install development dependencies:
-
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
-
-2. Format code:
-
-   ```bash
-   black src/ tests/
-   ```
-
-3. Run linting:
-
-   ```bash
-   ruff check src/ tests/
-   ```
-
-4. Type checking:
-
-   ```bash
-   mypy src/
-   ```
-
-5. Run tests:
-
-   ```bash
-   pytest tests/
-   ```
-
-### Code Standards
-
-- All public functions and classes must have comprehensive docstrings in Google style
-- All functions must have type hints
-- Code should follow PEP 8 standards (enforced by Black and Ruff)
-- New features should include appropriate tests
-
-## Contributing
-
-We welcome contributions of all kinds! See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:
-
-- Code style and standards (PEP 8, type hints)
-- Testing requirements and processes
-- Pull request workflow
-- Types of contributions we accept
-
-Quick start:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes following our guidelines
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
-
-Created for educational purposes to help users learn cybersecurity concepts through the OverTheWire Bandit wargame.
-
-## Security
-
-We take security seriously in this educational tool. See [SECURITY.md](SECURITY.md) for:
-
-- Data handling and privacy policies
-- SSH security considerations
-- OpenAI API data sharing details
-- Security best practices for users
-- Responsible disclosure policy
-
-## Acknowledgments
-
-- [OverTheWire](https://overthewire.org/) for providing the Bandit wargame
-- [Textual](https://github.com/Textualize/textual) for the terminal user interface framework
-- [OpenAI](https://openai.com/) for AI mentor capabilities
- 
- 
+| Key | Action |
+|---|---|
+| `1` – `4` | Switch tabs (Terminal / Session / Level Info / AI Mentor) |
+| `Ctrl+S` | Force-save progress |
+| `N` | New session |
+| `W` | Switch session dialog |
+| `D` | Toggle dark mode |
+| `Q` | Quit |
+| `↑` / `↓` | Navigate command history (when input is focused) |
+| `Ctrl+E` | Export terminal output (inside terminal widget) |
+| `Ctrl+L` | Clear terminal output |
