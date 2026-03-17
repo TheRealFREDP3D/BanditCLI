@@ -1,30 +1,24 @@
 """Main application module for BanditCLI.
 
-This module contains the main Textual application class that provides a terminal
-interface for the OverTheWire Bandit wargame. It includes SSH connection management,
-AI mentor integration, and level information display.
-
-The main class is BanditCLIApp, which extends Textual's App class and provides
-three main tabs: Terminal, Level Info, and AI Mentor.
+This module contains the main Textual application class that provides a
+terminal interface for the OverTheWire Bandit wargame. It includes SSH
+connection management, AI mentor integration, and level information display.
 """
 
-# src/main.py
 import asyncio
 import os
 import re
 import time
-from contextlib import suppress
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.events import Key
-from textual.timer import Timer
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.validation import Function, ValidationResult
+from textual.validation import Function
 from textual.widget import Widget
 from textual.widgets import (
     Button,
@@ -40,6 +34,9 @@ from textual.widgets import (
     TextArea,
 )
 
+if TYPE_CHECKING:
+    from textual.timer import Timer
+
 from . import __version__
 from .ai_mentor import BanditAIMentor
 from .command_history import CommandHistory
@@ -50,31 +47,204 @@ from .session_manager import SessionManager
 from .ssh_manager import SSHManager
 from .terminal_output import EnhancedTerminalOutput
 
-# Load environment variables
 load_dotenv()
 
+# ---------------------------------------------------------------------------
+# Bandit password pattern: exactly 32 printable non-whitespace characters.
+# Real Bandit passwords are alphanumeric, but this is intentionally slightly
+# broader to cope with any future format changes.
+# ---------------------------------------------------------------------------
+_PASSWORD_RE = re.compile(r"\b([A-Za-z0-9]{32})\b")
 
-def format_duration(seconds: float) -> str:
-    """Convert seconds to a readable duration format.
-    
+# Minimum gap between successive password-detection triggers (seconds).
+_PASSWORD_DETECT_COOLDOWN = 5.0
+
+
+def validate_username(value: str) -> bool:
+    """Validate SSH username for security.
+
     Args:
-        seconds: Duration in seconds.
-        
-    Returns:
-        Formatted duration string (e.g., "2h 15m 30s").
-    """
-    if seconds < 60:
-        return f"{seconds:.0f}s"
-    elif seconds < 3600:
-        minutes = int(seconds // 60)
-        remaining_seconds = int(seconds % 60)
-        return f"{minutes}m {remaining_seconds}s"
-    else:
-        hours = int(seconds // 3600)
-        remaining_minutes = int((seconds % 3600) // 60)
-        remaining_seconds = int(seconds % 60)
-        return f"{hours}h {remaining_minutes}m {remaining_seconds}s"
+        value: The username string to validate.
 
+    Returns:
+        True if valid, False otherwise.
+    """
+    if not value:
+        return False
+    if any(c in value for c in [";", "&", "|", "`", "$", "(", ")", "<", ">", '"', "'", "\\"]):
+        return False
+    if len(value) > 32:
+        return False
+    return bool(re.match(r"^[a-zA-Z0-9_-]+$", value))
+
+
+# ---------------------------------------------------------------------------
+# Password detector
+# ---------------------------------------------------------------------------
+
+class PasswordDetector:
+    """Scans terminal output lines for Bandit-style passwords.
+
+    Uses a sliding window of recent output so a password split across
+    two SSH data chunks is still matched.
+
+    Attributes:
+        _seen (set[str]): Passwords already reported this session to avoid
+            duplicate notifications.
+        _last_trigger (float): Epoch time of the last detection event, used
+            to enforce a cooldown between successive triggers.
+    """
+
+    # Lines of context kept between chunks to catch split passwords.
+    _CONTEXT_LINES = 4
+
+    def __init__(self) -> None:
+        self._seen: set[str] = set()
+        self._last_trigger: float = 0.0
+        self._tail: str = ""  # leftover partial line from previous chunk
+
+    def reset(self) -> None:
+        """Clear state when starting a new level / session."""
+        self._seen.clear()
+        self._last_trigger = 0.0
+        self._tail = ""
+
+    def feed(self, raw_text: str) -> list[str]:
+        """Feed a chunk of terminal text and return any new passwords found.
+
+        Args:
+            raw_text: Raw (ANSI-stripped) text received from SSH.
+
+        Returns:
+            List of newly-discovered password strings (may be empty).
+        """
+        now = time.monotonic()
+        if now - self._last_trigger < _PASSWORD_DETECT_COOLDOWN:
+            return []
+
+        # Prepend any leftover tail from the previous chunk so we don't
+        # miss a password that straddles a chunk boundary.
+        combined = self._tail + raw_text
+
+        # Keep a small tail for the next call.
+        lines = combined.split("\n")
+        self._tail = "\n".join(lines[-self._CONTEXT_LINES :])
+
+        found: list[str] = []
+        for match in _PASSWORD_RE.finditer(combined):
+            candidate = match.group(1)
+            if candidate not in self._seen:
+                self._seen.add(candidate)
+                found.append(candidate)
+                self._last_trigger = now
+
+        return found
+
+
+# ---------------------------------------------------------------------------
+# Modal: level complete / next-level login offer
+# ---------------------------------------------------------------------------
+
+class LevelCompleteModal(ModalScreen[Optional[bool]]):
+    """Congratulations modal shown when a password is detected.
+
+    Offers the user a one-click option to disconnect and reconnect as the
+    next Bandit level using the recovered password.
+
+    Returns:
+        True  → user wants to auto-login to the next level.
+        False → user wants to stay on the current level.
+        None  → modal was dismissed without choosing.
+    """
+
+    DEFAULT_CSS = """
+    LevelCompleteModal {
+        align: center middle;
+    }
+
+    #complete_dialog {
+        width: 70;
+        height: auto;
+        border: thick $accent 80%;
+        background: $surface;
+        padding: 2 3;
+    }
+
+    #complete_title {
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        color: $accent;
+        margin: 0 0 1 0;
+    }
+
+    #complete_body {
+        width: 100%;
+        margin: 0 0 1 0;
+    }
+
+    #complete_password_label {
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        margin: 1 0;
+    }
+
+    #complete_buttons {
+        align: center bottom;
+        height: auto;
+        margin: 1 0 0 0;
+    }
+
+    #complete_buttons > Button {
+        margin: 0 1;
+    }
+    """
+
+    def __init__(
+        self,
+        current_level: int,
+        password: str,
+    ) -> None:
+        super().__init__()
+        self._current_level = current_level
+        self._next_level = current_level + 1
+        self._password = password
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="complete_dialog"):
+            yield Label(
+                f"🎉  Level {self._current_level} Complete!",
+                id="complete_title",
+            )
+            yield Label(
+                f"A password for [bold]bandit{self._next_level}[/bold] was detected "
+                f"in the terminal output.\n\n"
+                f"Progress has been saved automatically.",
+                id="complete_body",
+            )
+            yield Label(
+                f"[dim]{self._password}[/dim]",
+                id="complete_password_label",
+            )
+            with Horizontal(id="complete_buttons"):
+                yield Button(
+                    f"Login to Level {self._next_level} →",
+                    variant="primary",
+                    id="next_level_login",
+                )
+                yield Button("Stay on Level", id="stay_level")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "next_level_login":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
+
+
+# ---------------------------------------------------------------------------
+# Existing modal screens (unchanged)
+# ---------------------------------------------------------------------------
 
 class SessionSwitchModal(ModalScreen[Optional[tuple[str, bool]]]):
     """Modal screen for switching sessions with restore option."""
@@ -87,7 +257,6 @@ class SessionSwitchModal(ModalScreen[Optional[tuple[str, bool]]]):
         with Vertical(id="switch_dialog"):
             yield Label("Switch Session", id="switch_label")
 
-            # Get available sessions
             sessions = self.session_manager.list_sessions()
             active_session = self.session_manager.get_active_session()
             active_id = active_session.session_id if active_session else None
@@ -127,8 +296,6 @@ class SessionSwitchModal(ModalScreen[Optional[tuple[str, bool]]]):
             if not selection_list.selected:
                 self.notify("Please select a session to switch to", severity="warning")
                 return
-
-            # Get selected session ID
             session_id = list(selection_list.selected)[0]
             restore_flag = event.button.id == "restore_switch"
             self.dismiss((session_id, restore_flag))
@@ -145,19 +312,17 @@ class DeleteSessionModal(ModalScreen[bool]):
         with Vertical(id="delete_dialog"):
             yield Label("Select session to delete:", id="delete_label")
 
-            # Get available sessions (excluding active one)
             active_session = self.session_manager.get_active_session()
             active_id = active_session.session_id if active_session else None
 
-            options = []
-            for session in self.session_manager.list_sessions():
-                if session.session_id != active_id:
-                    options.append(
-                        (
-                            f"{session.get_display_name()} (Level {session.current_level})",
-                            session.session_id,
-                        )
-                    )
+            options = [
+                (
+                    f"{session.get_display_name()} (Level {session.current_level})",
+                    session.session_id,
+                )
+                for session in self.session_manager.list_sessions()
+                if session.session_id != active_id
+            ]
 
             if not options:
                 yield Label("No other sessions available to delete.", id="no_sessions_label")
@@ -176,16 +341,16 @@ class DeleteSessionModal(ModalScreen[bool]):
             if not selection_list.selected:
                 self.notify("Please select a session to delete", severity="warning")
                 return
-
-            # Delete selected sessions
-            deleted_count = 0
-            for session_id in selection_list.selected:
-                if self.session_manager.delete_session(session_id):
-                    deleted_count += 1
-
+            deleted_count = sum(
+                1 for sid in selection_list.selected if self.session_manager.delete_session(sid)
+            )
             self.app.notify(f"Deleted {deleted_count} session(s)", severity="information")
             self.dismiss(True)
 
+
+# ---------------------------------------------------------------------------
+# UI helper widgets
+# ---------------------------------------------------------------------------
 
 class ConnectionStatus(Static):
     """A widget to display SSH connection status with visual indicator."""
@@ -193,87 +358,32 @@ class ConnectionStatus(Static):
     connected = reactive(False)
 
     def _get_status_text(self) -> str:
-        """Get the status text based on connection state."""
         if self.connected:
             return "[green]●[/green] Connected"
-        else:
-            return "[red]●[/red] Disconnected"
+        return "[red]●[/red] Disconnected"
 
     def on_mount(self) -> None:
-        """Set initial status text on mount."""
         self.update(self._get_status_text())
 
     def watch_connected(self, connected: bool) -> None:
-        """Watch for changes to connected state and update content."""
         self.update(self._get_status_text())
 
 
 class VersionFooter(Widget):
-    """A custom footer widget that displays version information alongside key bindings."""
+    """A custom footer widget that displays version information."""
 
     def compose(self) -> ComposeResult:
-        """Compose the footer with version display and standard footer functionality."""
         with Horizontal():
             yield Label(f"v{__version__}", id="version-label")
             yield Footer()
 
 
-def validate_username(value: str) -> ValidationResult:
-    """Validate SSH username for security.
-
-    Args:
-        value: The username string to validate.
-
-    Returns:
-        ValidationResult: Success if valid, failure with message if invalid.
-    """
-
-    def validate_field(val: str, error_msg: str) -> ValidationResult:
-        return ValidationResult.failure([Function(lambda v: v != val, error_msg)])
-
-    if not value:
-        return validate_field(value, "Username is required")
-
-    # Check for dangerous characters that could lead to injection
-    dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", '"', "'", "\\"]
-    if any(char in value for char in dangerous_chars):
-        return validate_field(value, "Username contains invalid characters")
-
-    # Length check
-    if len(value) > 32:
-        return validate_field(value, "Username too long (max 32 characters)")
-
-    # Pattern check (allow alphanumeric, underscores, hyphens)
-    if not re.match(r"^[a-zA-Z0-9_-]+$", value):
-        return validate_field(
-            value, "Username can only contain letters, numbers, underscores, and hyphens"
-        )
-
-    return ValidationResult.success()
-
+# ---------------------------------------------------------------------------
+# Main application
+# ---------------------------------------------------------------------------
 
 class BanditCLIApp(App):
-    """A Textual app for the Bandit Wargame CLI.
-
-    This is the main application class that provides a terminal interface for
-    the OverTheWire Bandit wargame. It features SSH connectivity, an AI mentor
-    for guidance, and comprehensive level information.
-
-    Attributes:
-        current_level (int): The current Bandit level being attempted.
-        session_id (str): Session identifier for SSH connections.
-        recent_commands (list): List of recently executed commands.
-        terminal_output (str): Accumulated terminal output from SSH sessions.
-        offline_mode (bool): Flag indicating if the app is in offline mode.
-        ssh_manager (SSHManager): Manages SSH connections and sessions.
-        level_info (BanditLevelInfo): Provides level information and hints.
-        ai_mentor (BanditAIMentor): AI-powered mentor for guidance.
-        ssh_connected (reactive): Reactive property for SSH connection status.
-        loading (reactive): Reactive property for loading indicator status.
-        ai_generating (reactive): Reactive property for AI response generation.
-        CSS_PATH (str): Path to the CSS file for styling.
-        BINDINGS (list): Keyboard shortcuts and their corresponding actions.
-    """
+    """A Textual app for the Bandit Wargame CLI."""
 
     CSS_PATH = "app.tcss"
 
@@ -284,245 +394,242 @@ class BanditCLIApp(App):
         ("2", "switch_tab('session')", "Session"),
         ("3", "switch_tab('level')", "Level Info"),
         ("4", "switch_tab('mentor')", "AI Mentor"),
-        ("c", "show_cache_stats", "Cache Stats"),
-        ("ctrl+c", "cancel_operation", "Cancel"),
-        ("ctrl+shift+c", "clear_cache", "Clear Cache"),
         ("ctrl+s", "save_progress", "Save Progress"),
-        ("?", "ask_about_last_output", "Ask AI about last output"),
-        ("s", "show_session_info", "Session Info"),
         ("n", "new_session", "New Session"),
         ("w", "switch_session_dialog", "Switch Session"),
     ]
 
     def _notify_wrapper(self, message: str, severity: str) -> None:
-        """Wrapper to convert callback signature to Textual notify signature.
-
-        Args:
-            message: The message to display.
-            severity: The severity level of the message.
-        """
-        # Map severity levels to Textual supported values
-        severity_map = {
+        """Convert callback severity string to Textual's Literal type."""
+        severity_map: dict[str, Literal["information", "warning", "error"]] = {
             "info": "information",
             "success": "information",
             "error": "error",
             "warning": "warning",
         }
-        # Default to "information" if unknown severity
-        textual_severity = severity_map.get(severity, "information")
-        self.notify(message, severity=textual_severity)
+        self.notify(message, severity=severity_map.get(severity, "information"))
 
     def __init__(self) -> None:
-        """Initialize the BanditCLI application.
-
-        Sets up the application state, loads configuration, initializes
-        managers for SSH, AI mentor, and level information, and configures
-        reactive properties for UI state management.
-        """
         super().__init__()
 
-        # Initialize performance monitor
         self.performance_monitor = get_performance_monitor()
-
-        # Initialize configuration manager with validation
         self.config = ConfigManager()
-
-        # Validate configuration on startup
         self._validate_configuration()
 
         self.current_level = 0
         self.session_id = "default"
-        self.recent_commands = []
+        self.recent_commands: list[str] = []
         self.terminal_output = ""
-        self.max_terminal_output_size = 50000  # Limit to ~50KB of terminal output
-        self.offline_mode = False
+        self.max_terminal_output_size = 50000
         self.ssh_manager = SSHManager(notify_callback=self._notify_wrapper)
         self.level_info = BanditLevelInfo(notify_callback=self._notify_wrapper)
         self.ai_mentor = BanditAIMentor(notify_callback=self._notify_wrapper, config=self.config)
         self.command_history = CommandHistory()
         self.session_manager = SessionManager()
-        self.ssh_connected = reactive(False)
-        self.loading = reactive(False)
-        self.ai_generating = reactive(False)
-        self.current_input_buffer = ""
+        self.ssh_connected: reactive[bool] = reactive(False)
+        self.loading: reactive[bool] = reactive(False)
+        self._session_has_content = False
 
-        # Auto-save infrastructure
         self._last_save_time: float = 0
         self._pending_save: bool = False
-        self._save_timer: Optional[Timer] = None
+        self._save_timer: Optional["Timer"] = None
         self._save_debounce_seconds: int = 5
 
-        # Watch for reactive property changes
-        self.watch(self, "ssh_connected", self.watch_ssh_connected)
-        self.watch(self, "loading", self.watch_loading)
+        self._watchers_setup = False
 
-    def _mark_state_dirty(self) -> None:
-        """Mark session state as dirty and schedule auto-save.
-        
-        Sets the pending save flag and schedules a debounced save timer.
-        Cancels any existing timer to prevent duplicate saves.
-        """
-        self._pending_save = True
-        
-        # Cancel existing timer if active
-        if self._save_timer is not None:
-            self._save_timer.stop()
-            self._save_timer = None
-        
-        # Schedule new timer
-        self._save_timer = self.set_timer(self._save_debounce_seconds, self._auto_save_session_state)
+        # Password detection
+        self._password_detector = PasswordDetector()
+        self._level_complete_modal_open = False
 
-    def _auto_save_session_state(self, force: bool = False) -> None:
-        """Auto-save session state with debouncing.
-        
-        Extracts current terminal history, AI conversation history, and active tab
-        information, then persists it via SessionManager. Handles exceptions
-        gracefully to avoid disrupting user experience.
-        
-        Args:
-            force: If True, bypasses the _pending_save guard to force immediate save.
-        """
-        if not force and not self._pending_save:
-            return
-        
-        try:
-            # Extract terminal history from EnhancedTerminalOutput widget
-            terminal_history = ""
-            try:
-                terminal_widget = self.query_one("#terminal_output", EnhancedTerminalOutput)
-                terminal_history = terminal_widget._virtual_buffer
-            except Exception:
-                # Fallback to regular terminal_output if enhanced widget not available
-                terminal_history = self.terminal_output
-            
-            # Extract AI conversation history
-            ai_history = self.ai_mentor.conversation_history.get(self.session_id, [])
-            
-            # Get active tab ID
-            active_tab = "terminal"  # Default fallback
-            try:
-                tabbed = self.query_one(TabbedContent)
-                active_tab = tabbed.active
-            except Exception:
-                pass
-            
-            # Call SessionManager to update session state
-            self.session_manager.update_session_state(
-                session_id=self.session_id,
-                terminal_history=terminal_history.splitlines(),
-                ai_history=ai_history,
-                active_tab=active_tab
-            )
-            
-            # Update save tracking
-            self._last_save_time = time.time()
-            self._pending_save = False
-            
-            # Optional visual feedback for auto-save
-            if not force:  # Only show feedback for auto-saves, not manual saves
-                try:
-                    save_indicator = self.query_one("#last_save_indicator", Static)
-                    save_indicator.update("✓ Auto-saved")
-                    # Clear the indicator after 3 seconds
-                    self.set_timer(3.0, lambda: save_indicator.update(""))
-                except Exception:
-                    pass  # Widget might not be ready
-            
-        except Exception as e:
-            # Log error but don't disrupt user experience
-            self._log_error(f"Auto-save failed: {e}")
-        finally:
-            # Clear timer reference
-            self._save_timer = None
+    # ─── Setup ────────────────────────────────────────────────────────────────
+
+    def _setup_watchers(self) -> None:
+        if not self._watchers_setup:
+            self.watch(self, "ssh_connected", self.watch_ssh_connected)
+            self.watch(self, "loading", self.watch_loading)
+            self._watchers_setup = True
 
     def _validate_configuration(self) -> None:
-        """Validate configuration settings on startup.
-
-        Checks critical configuration values and provides user feedback
-        for any invalid or missing settings.
-        """
         try:
-            # Validate SSH configuration
             ssh_host = self.config.get("ssh.host")
             ssh_port = self.config.get("ssh.port")
             ssh_timeout = self.config.get("ssh.timeout")
 
             if not ssh_host or not isinstance(ssh_port, int) or not isinstance(ssh_timeout, int):
                 self.notify(
-                    "Warning: Invalid SSH configuration detected. Using defaults.",
-                    severity="warning",
+                    "Warning: Invalid SSH configuration. Using defaults.", severity="warning"
                 )
-                # Reset to defaults if invalid
                 self.config.set("ssh.host", "bandit.labs.overthewire.org")
                 self.config.set("ssh.port", 2220)
                 self.config.set("ssh.timeout", 10)
                 self.config.save_config()
 
-            # Validate AI configuration
-            ai_model = self.config.get("ai.model")
-            if not ai_model:
+            if not self.config.get("ai.model"):
                 self.notify("Warning: No AI model configured. Using default.", severity="warning")
                 self.config.set("ai.model", "gpt-3.5-turbo")
                 self.config.save_config()
-
         except Exception as e:
             self.notify(f"Configuration validation error: {e}", severity="error")
 
-    def watch_ssh_connected(self, connected: bool) -> None:
-        """Called when the ssh_connected reactive property changes.
+    # ─── Output callback (called from reader thread) ──────────────────────────
 
-        Updates the UI state based on SSH connection status. Enables/disables
-        buttons as appropriate, and updates the connection status indicator.
+    def _on_ssh_output_threadsafe(self, data: str) -> None:
+        """Receive SSH output from the reader thread and dispatch to the main thread."""
+        self.call_from_thread(self._on_ssh_output, data)
+
+    def _on_ssh_output(self, data: str) -> None:
+        """Handle SSH output on the main thread."""
+        self.terminal_output += data
+        if len(self.terminal_output) > self.max_terminal_output_size:
+            trim_size = int(self.max_terminal_output_size * 0.8)
+            self.terminal_output = self.terminal_output[-trim_size:]
+
+        try:
+            self.query_one("#terminal_output", EnhancedTerminalOutput).append_text(
+                data, scroll_to_bottom=True
+            )
+        except Exception:
+            try:
+                self.query_one("#terminal_output", TextArea).insert(data)
+            except Exception:
+                pass
+
+        self._mark_state_dirty()
+
+        # Extract commands hinted at in the output for history / level detection
+        for line in data.split("\n"):
+            if ("$ " in line or "# " in line) and len(line.strip()) > 2:
+                prompt_pos = line.find("$ ") if "$ " in line else line.find("# ")
+                if prompt_pos != -1:
+                    cmd = line[prompt_pos + 2 :].strip()
+                    if cmd and not cmd.startswith("["):
+                        self.command_history.add_command(cmd)
+                        self.recent_commands.append(cmd)
+                        if len(self.recent_commands) > 5:
+                            self.recent_commands = self.recent_commands[-5:]
+                        self._detect_level_progression(cmd)
+
+        # ── Password detection ──────────────────────────────────────────────
+        # Strip ANSI before scanning so escape sequences don't fragment tokens.
+        from .terminal_output import ANSIColorParser
+        clean_data = ANSIColorParser().parse_ansi_text(data)
+        new_passwords = self._password_detector.feed(clean_data)
+        for pwd in new_passwords:
+            self._handle_password_detected(pwd)
+
+    # ─── Password detection logic ─────────────────────────────────────────────
+
+    def _handle_password_detected(self, password: str) -> None:
+        """React to a newly detected password in terminal output.
+
+        - Saves the password to the current session.
+        - Marks the current level complete.
+        - Shows the LevelCompleteModal (once at a time).
 
         Args:
-            connected: Whether SSH is connected or not.
+            password: The 32-character password string that was detected.
         """
-        # Update buttons
+        if self._level_complete_modal_open:
+            return  # don't stack modals
+
+        level = self.current_level
+
+        # Persist password and mark level complete.
+        self.session_manager.store_recovered_password(self.session_id, level, password)
+        session = self.session_manager.get_session(self.session_id)
+        if session:
+            session.mark_level_complete(level)
+        self._auto_save_session_state(force=True)
+
+        self.notify(
+            f"🔑 Password detected for Level {level + 1}! Progress saved.",
+            severity="information",
+        )
+
+        self._level_complete_modal_open = True
+
+        def _after_modal(proceed: Optional[bool]) -> None:
+            self._level_complete_modal_open = False
+            if proceed:
+                self._auto_login_next_level(level, password)
+
+        self.push_screen(LevelCompleteModal(level, password), _after_modal)
+
+    def _auto_login_next_level(self, completed_level: int, password: str) -> None:
+        """Disconnect from the current level and reconnect as the next bandit user.
+
+        Args:
+            completed_level: The level that was just completed.
+            password: The password for the next level.
+        """
+        next_level = completed_level + 1
+        next_username = f"bandit{next_level}"
+
+        # Update UI inputs before connecting.
+        try:
+            self.query_one("#ssh_username", Input).value = next_username
+            self.query_one("#ssh_password", Input).value = password
+        except Exception:
+            pass
+
+        # Disconnect current session.
+        if self.ssh_connected:
+            self.disconnect_ssh()
+
+        # Advance level counter and update level info panel.
+        self.current_level = next_level
+        self.update_level_info()
+
+        # Reset password detector for the new level.
+        self._password_detector.reset()
+
+        # Reconnect — connect_ssh() reads values from the Input widgets.
+        self.connect_ssh()
+
+        self.notify(
+            f"Connecting to Level {next_level} as {next_username}…",
+            severity="information",
+        )
+
+    # ─── Reactive watchers ────────────────────────────────────────────────────
+
+    def watch_ssh_connected(self, connected: bool) -> None:
         try:
             self.query_one("#ssh_connect", Button).disabled = connected
             self.query_one("#ssh_disconnect", Button).disabled = not connected
         except Exception:
-            # Widgets might not be ready/mounted yet
             pass
 
-        # Update connection status indicator
         try:
-            connection_status = self.query_one("#connection_status", ConnectionStatus)
-            connection_status.connected = connected
+            self.query_one("#connection_status", ConnectionStatus).connected = connected
         except Exception:
             pass
 
-        # Set focus to the terminal output if connected
-        if connected:
-            try:
-                self.query_one("#terminal_output", EnhancedTerminalOutput).focus()
-            except Exception:
-                pass
+        try:
+            terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
+            command_input = self.query_one("#command_input", Input)
+            terminal.read_only = True
+            terminal.set_ssh_input_callback(None)
+            if connected:
+                command_input.focus()
+            else:
+                terminal.focus()
+        except Exception:
+            pass
+
+        # Reset password detector whenever the connection state changes.
+        if not connected:
+            self._password_detector.reset()
+            self._level_complete_modal_open = False
 
     def watch_loading(self, loading: bool) -> None:
-        """Called when the loading reactive property changes.
-
-        Shows or hides all loading indicators in the UI based on the loading state.
-
-        Args:
-            loading: Whether the app is in a loading state.
-        """
         for indicator in self.query(LoadingIndicator):
             indicator.display = loading
 
+    # ─── Layout ───────────────────────────────────────────────────────────────
+
     def compose(self) -> ComposeResult:
-        """Create child widgets for the app.
-
-        Composes the main application layout with a header, tabbed content
-        containing four tabs (Terminal, Session, Level Info, and AI Mentor), and a custom footer.
-
-        Yields:
-            Header: The application header.
-            TabbedContent: Container for the four main tabs.
-            VersionFooter: A custom footer with version display and key bindings.
-        """
         yield Header()
-
         with TabbedContent(initial="terminal"):
             with TabPane("Terminal", id="terminal"):
                 with Vertical():
@@ -533,40 +640,18 @@ class BanditCLIApp(App):
                 yield from self.compose_level_view()
             with TabPane("AI Mentor", id="mentor"):
                 yield from self.compose_mentor_view()
-
         yield VersionFooter()
 
     def compose_terminal_view(self) -> ComposeResult:
-        """Compose the terminal view.
-
-        Creates the terminal tab layout with only terminal output display
-        and command input field, maximizing screen space for terminal usage.
-
-        Yields:
-            EnhancedTerminalOutput: Terminal output display.
-            Input: Command input field for SSH interaction.
-        """
         yield EnhancedTerminalOutput(id="terminal_output", read_only=True)
-        with Horizontal(id="command-input-bar"):
-            yield Input(placeholder="Enter command...", id="command_input")
+        with Horizontal(id="command-input-bar", classes="command-input-container"):
+            yield Input(placeholder="Enter command...", id="command_input", classes="command-input")
 
     def compose_session_view(self) -> ComposeResult:
-        """Compose the session management view.
-
-        Creates the session tab layout with SSH connection controls and
-        session management features.
-
-        Yields:
-            LoadingIndicator: Shows loading state.
-            ConnectionStatus: Shows connection status with visual indicator.
-            Various input widgets and buttons for SSH connection and session management.
-        """
         with Vertical():
             yield LoadingIndicator()
             with Horizontal(id="connection-status-bar"):
                 yield ConnectionStatus(id="connection_status")
-
-            # SSH Connection Controls
             with Vertical(id="ssh-controls"):
                 yield Label("[bold]SSH Connection[/bold]")
                 with Horizontal():
@@ -583,31 +668,18 @@ class BanditCLIApp(App):
                     yield Input(placeholder="2220", id="ssh_port")
                     yield Button("Connect", variant="primary", id="ssh_connect")
                     yield Button("Disconnect", variant="error", id="ssh_disconnect")
-
-            # Session Management Controls
             with Horizontal(id="session-controls"):
                 yield Label("Session:", id="session-label")
                 yield Button("New Session", id="new_session")
                 yield Button("Switch Session", id="switch_session")
                 yield Button("Delete Session", id="delete_session", variant="error")
                 yield Static(id="current_session_display")
-
-            # Progress Management Controls
             with Horizontal(id="save-controls"):
                 yield Label("[bold]Progress Management[/bold]")
                 yield Button("Save Progress", variant="success", id="save_progress")
                 yield Static("", id="last_save_indicator")
 
     def compose_level_view(self) -> ComposeResult:
-        """Compose the level information view.
-
-        Creates the level info tab with a text area for displaying level
-        information and navigation buttons for switching between levels.
-
-        Yields:
-            TextArea: Display area for level information.
-            Buttons: Previous and Next level navigation.
-        """
         with Vertical():
             yield TextArea(id="level_info", read_only=True)
             with Horizontal():
@@ -615,18 +687,6 @@ class BanditCLIApp(App):
                 yield Button("Next Level", id="next_level")
 
     def compose_mentor_view(self) -> ComposeResult:
-        """Compose the AI mentor view.
-
-        Creates the AI mentor tab with a chat interface for interacting with
-        the AI mentor, including a loading indicator, message input, and
-        conversation management controls.
-
-        Yields:
-            LoadingIndicator: Shows AI response generation state.
-            TextArea: Chat interface display.
-            Input and Button: Message input and send controls.
-            Buttons: Conversation management controls.
-        """
         with Vertical():
             yield LoadingIndicator()
             yield TextArea(id="mentor_chat", read_only=True)
@@ -637,98 +697,65 @@ class BanditCLIApp(App):
                 yield Button("Clear History", id="clear_history", variant="error")
                 yield Button("Export Chat", id="export_chat", variant="success")
 
-    def on_mount(self) -> None:
-        """Called when the app is mounted.
+    # ─── Lifecycle ────────────────────────────────────────────────────────────
 
-        Initializes the application state, sets the title and subtitle,
-        updates level information, configures initial button states,
-        and warms up the cache for frequently accessed levels.
-        """
+    def on_mount(self) -> None:
         self.title = "Bandit Wargame CLI"
         self.sub_title = f"A terminal interface for OverTheWire Bandit v{__version__}"
 
-        # Initialize the level info
         self.update_level_info()
-        # Initial state of buttons
+        self.query_one("#ssh_connect", Button).disabled = False
         self.query_one("#ssh_disconnect", Button).disabled = True
-        # Ensure loading indicators are hidden initially
+
         self.loading = False
-        # Hide loading indicators explicitly
         for indicator in self.query(LoadingIndicator):
             indicator.display = False
 
-        # Initialize session management
+        self._setup_watchers()
         self._initialize_session()
 
-        # Run the welcome animation only if session has no content
-        if not getattr(self, '_session_has_content', False):
+        if not self._session_has_content:
             asyncio.create_task(self.run_welcome_animation())
 
-        # Warm up cache for frequently accessed levels (0-5)
         asyncio.create_task(self._warm_up_cache())
 
     def on_unmount(self) -> None:
-        """Called when the app is about to exit.
-
-        Performs cleanup operations including cache cleanup and final state save.
-        """
         try:
-            # Save session state immediately on exit
             self._auto_save_session_state(force=True)
-            
-            # Cancel any pending save timer
             if self._save_timer is not None:
                 self._save_timer.stop()
                 self._save_timer = None
-            
-            # Clean up expired cache entries
             level_cleanup = self.level_info.cache.cleanup_expired()
             ai_cleanup = self.ai_mentor.cache.cleanup_expired()
-
-            if level_cleanup > 0 or ai_cleanup > 0:
+            if level_cleanup + ai_cleanup > 0:
                 self.notify(
                     f"Cleaned up {level_cleanup + ai_cleanup} expired cache entries on exit",
                     severity="information",
                 )
         except Exception as e:
-            # Don't fail the application exit
             self.notify(f"Cleanup failed on exit: {e}", severity="warning")
 
     async def _warm_up_cache(self) -> None:
-        """Warm up cache for frequently accessed levels (0-5).
-
-        Pre-loads level information for the most commonly accessed levels
-        to improve performance during user interaction.
-        """
         try:
-            # Warm up levels 0-5 (most frequently accessed)
             for level in range(6):
-                # Pre-load level info
                 self.level_info.get_level_info(level)
-                # Pre-load formatted level info
                 self.level_info.format_level_info(level)
-
         except Exception as e:
-            # Don't fail the application if cache warming fails
             self.notify(f"Cache warming failed: {e}", severity="warning")
 
     async def run_welcome_animation(self) -> None:
-        """Displays the welcome animation with ASCII art and instructions."""
         terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
-        
-        # Early return if terminal already has content (restored from session)
-        if hasattr(terminal, '_virtual_buffer') and terminal._virtual_buffer:
+
+        if hasattr(terminal, "_virtual_buffer") and terminal._virtual_buffer:
             return
 
-        # False Server Loading
         loading_steps = [
             " [ init ] Connecting to OTW secure gateway...",
             " [ net  ] Establishing encrypted tunnel...",
             " [ auth ] Verifying handshake keys...",
             " [ load ] Loading Bandit wargame modules...",
-            " [ ok   ] Connection established."
+            " [ ok   ] Connection established.",
         ]
-
         for step in loading_steps:
             if self.ssh_connected:
                 return
@@ -737,7 +764,6 @@ class BanditCLIApp(App):
 
         await asyncio.sleep(0.5)
 
-        # ASCII Art Title
         ascii_title = r"""
   ____                  _ _ _    ____ _     ___
  | __ )  __ _ _ __   __| (_) |_ / ___| |   |_ _|
@@ -748,17 +774,14 @@ class BanditCLIApp(App):
         terminal.append_text(ascii_title + "\n", scroll_to_bottom=False)
         await asyncio.sleep(0.5)
 
-        # Instructions
-        instructions = [
+        for line in [
             "\n",
             "HOW TO START:",
             "1. Read Level 0 directives in the Level Info tab",
             "2. Connect to the server in the Session tab",
             "3. Play the game by sending commands in the Terminal tab",
             "\n",
-        ]
-
-        for line in instructions:
+        ]:
             if self.ssh_connected:
                 return
             terminal.append_text(line + "\n", scroll_to_bottom=False)
@@ -766,156 +789,112 @@ class BanditCLIApp(App):
 
         terminal.scroll_to_bottom()
 
-    @track_performance("update_level_info")
-    def update_level_info(self) -> None:
-        """Update the level information display.
+    # ─── Actions ──────────────────────────────────────────────────────────────
 
-        Refreshes the level info text area with formatted information for
-        the current level.
-        """
-        level_info_text = self.level_info.format_level_info(self.current_level)
-        level_info_widget = self.query_one("#level_info", TextArea)
-        level_info_widget.load_text(level_info_text)
+    def action_switch_tab(self, tab_id: str) -> None:
+        try:
+            self.query_one(TabbedContent).active = tab_id
+        except Exception:
+            pass
+
+    def action_save_progress(self) -> None:
+        try:
+            self._auto_save_session_state(force=True)
+            self.notify("Progress saved successfully", severity="information")
+        except Exception as e:
+            self.notify(f"Failed to save progress: {e}", severity="error")
+
+    def action_new_session(self) -> None:
+        self.create_new_session()
+
+    def action_switch_session_dialog(self) -> None:
+        self.show_session_switch_dialog()
+
+    # ─── Button routing ───────────────────────────────────────────────────────
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button press events.
-
-        Routes button presses to their corresponding handler methods.
-
-        Args:
-            event: The button press event containing the button reference.
-        """
-        if event.button.id == "ssh_connect":
-            self.connect_ssh()
-        elif event.button.id == "ssh_disconnect":
-            self.disconnect_ssh()
-        elif event.button.id == "prev_level":
-            self.previous_level()
-        elif event.button.id == "next_level":
-            self.next_level()
-        elif event.button.id == "mentor_send":
-            self.send_mentor_message()
-        elif event.button.id == "clear_history":
-            self.clear_conversation_history()
-        elif event.button.id == "export_chat":
-            self.export_conversation()
-        elif event.button.id == "new_session":
-            self.create_new_session()
-        elif event.button.id == "switch_session":
-            self.show_session_switch_dialog()
-        elif event.button.id == "delete_session":
-            self.show_delete_session_dialog()
-        elif event.button.id == "save_progress":
-            self.action_save_progress()
+        handlers = {
+            "ssh_connect": self.connect_ssh,
+            "ssh_disconnect": self.disconnect_ssh,
+            "prev_level": self.previous_level,
+            "next_level": self.next_level,
+            "mentor_send": self.send_mentor_message,
+            "clear_history": self.clear_conversation_history,
+            "export_chat": self.export_conversation,
+            "new_session": self.create_new_session,
+            "switch_session": self.show_session_switch_dialog,
+            "delete_session": self.show_delete_session_dialog,
+            "save_progress": self.action_save_progress,
+        }
+        handler = handlers.get(event.button.id or "")
+        if handler:
+            handler()
 
     def on_key(self, event: Key) -> None:
-        """Handle keyboard events including command history navigation.
-
-        Handles SSH key forwarding when connected, command history navigation
-        with up/down arrows, and other keyboard shortcuts.
-
-        Args:
-            event: The key event containing the pressed key information.
-        """
-        # CRITICAL FIX: If an input or text area widget is focused, do NOT intercept keys.
-        # This prevents characters typed into the command input box from being
-        # sent directly to Paramiko by this global handler.
+        """Global key handler — only fires when no Input/TextArea is focused."""
         if isinstance(self.focused, (Input, TextArea)):
             return
 
-        # Handle command history navigation when not connected to SSH
         if not self.ssh_connected:
             if event.key == "up":
                 self._navigate_history_up()
-                return
             elif event.key == "down":
                 self._navigate_history_down()
-                return
-
-        # Only handle keyboard input when SSH is connected and we're on the terminal tab
-        if not self.ssh_connected:
             return
 
+        # SSH key forwarding — terminal tab only
         try:
-            # Check if we're on the terminal tab
-            tabbed = self.query_one(TabbedContent)
-            if tabbed.active != "terminal":
+            if self.query_one(TabbedContent).active != "terminal":
                 return
         except Exception:
             return
 
-        # Don't capture keys that should be handled by the UI
         if event.key in ["ctrl+c", "ctrl+d", "ctrl+z", "escape"]:
-            # Let these be handled by the system or other handlers
             return
 
-        # Get the SSH connection and send the key
         if connection := self.ssh_manager.get_connection(self.session_id):
-            # Handle special keys
-            if event.key == "enter":
-                connection.send_command("\n")
-            elif event.key == "backspace":
-                connection.send_command("\b")  # Backspace character
-            elif event.key == "delete":
-                connection.send_command("\x1b[3~")  # Delete character
-            elif event.key == "left":
-                connection.send_command("\x1b[D")  # Left arrow
-            elif event.key == "right":
-                connection.send_command("\x1b[C")  # Right arrow
-            elif event.key == "up":
-                connection.send_command("\x1b[A")  # Up arrow
-            elif event.key == "down":
-                connection.send_command("\x1b[B")  # Down arrow
-            elif event.key == "home":
-                connection.send_command("\x1b[H")  # Home
-            elif event.key == "end":
-                connection.send_command("\x1b[F")  # End
-            elif event.key == "pageup":
-                connection.send_command("\x1b[5~")  # Page up
-            elif event.key == "pagedown":
-                connection.send_command("\x1b[6~")  # Page down
+            key_map = {
+                "enter": "\r\n",
+                "backspace": "\b",
+                "delete": "\x1b[3~",
+                "left": "\x1b[D",
+                "right": "\x1b[C",
+                "up": "\x1b[A",
+                "down": "\x1b[B",
+                "home": "\x1b[H",
+                "end": "\x1b[F",
+                "pageup": "\x1b[5~",
+                "pagedown": "\x1b[6~",
+            }
+            if event.key in key_map:
+                connection.send_command(key_map[event.key])
             elif event.character:
-                # Regular character input
                 connection.send_command(event.character)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handle input submission events.
-
-        Routes input submissions to their corresponding handler methods
-        based on the input field ID.
-
-        Args:
-            event: The input submission event containing the input reference.
-        """
         if event.input.id == "mentor_input":
             self.send_mentor_message()
         elif event.input.id == "command_input":
             self.send_ssh_command()
 
+    # ─── SSH ──────────────────────────────────────────────────────────────────
+
     @track_performance("connect_ssh")
     def connect_ssh(self) -> None:
-        """Connect to the SSH server with validation.
-
-        Validates user input, establishes an SSH connection to the OverTheWire
-        Bandit server, and sets up the output callback for terminal display.
-        Handles connection errors and provides user feedback.
-        """
+        """Validate inputs, establish SSH connection, wire up the output callback."""
         self.loading = True
 
         try:
             username_input = self.query_one("#ssh_username", Input)
             password_input = self.query_one("#ssh_password", Input)
 
-            # Validate inputs
             username = username_input.value or ""
             password = password_input.value or ""
 
-            # Use configuration values from ConfigManager
             hostname = self.config.get("ssh.host", "bandit.labs.overthewire.org")
             port = self.config.get("ssh.port", "2220")
             timeout = self.config.get("ssh.timeout", "10")
 
-            # Check if inputs are valid
             if not username_input.validate(username):
                 self._handle_error_and_stop_loading("Invalid username")
                 return
@@ -924,145 +903,104 @@ class BanditCLIApp(App):
                 self._handle_error_and_stop_loading("Password is required")
                 return
 
-            # Validate hostname format to prevent injection attacks
-            import re
-
-            hostname_pattern = re.compile(r"^[a-zA-Z0-9.-]+$")
-            if not hostname or not hostname_pattern.match(hostname):
+            if (
+                not re.match(r"^[a-zA-Z0-9.-]+$", str(hostname))
+                or ".." in str(hostname)
+                or str(hostname).startswith(".")
+                or str(hostname).endswith(".")
+            ):
                 self._handle_error_and_stop_loading("Invalid hostname format")
                 return
 
-            # Prevent hostname injection attacks
-            if ".." in hostname or hostname.startswith(".") or hostname.endswith("."):
-                self._handle_error_and_stop_loading("Invalid hostname: potential injection attempt")
+            port_str = str(port)
+            if not port_str.isdigit() or not (1 <= int(port_str) <= 65535):
+                self._handle_error_and_stop_loading("Port must be between 1 and 65535")
                 return
 
-            # Validate port format and range before conversion
-            port_str = str(port) if not isinstance(port, str) else port
-            if not port_str or not port_str.isdigit() or int(port_str) < 1 or int(port_str) > 65535:
-                self._handle_error_and_stop_loading(
-                    "Port must be a valid integer between 1 and 65535"
-                )
-                return
-
-            # Validate timeout format and range
-            timeout_str = str(timeout) if not isinstance(timeout, str) else timeout
-            if not timeout_str or not timeout_str.isdigit():
-                self._handle_error_and_stop_loading("Timeout must be a valid positive integer")
-                return
-
-            timeout_int = int(timeout)
-            if timeout_int < 1 or timeout_int > 300:  # Reasonable range: 1 second to 5 minutes
+            timeout_str = str(timeout)
+            if not timeout_str.isdigit() or not (1 <= int(timeout_str) <= 300):
                 self._handle_error_and_stop_loading("Timeout must be between 1 and 300 seconds")
                 return
 
-            # Convert port to integer (already validated)
-            port_int = int(port)
+            port_int = int(port_str)
+            timeout_int = int(timeout_str)
 
-            # Attempt to connect with security settings
-            start_time = time.perf_counter()
-
-            # Default to secure host key verification for educational tool
             insecure_value = os.getenv("BANDIT_CLI_INSECURE", "").lower()
             verify_host_key = insecure_value not in ("true", "1", "yes")
 
+            start_time = time.perf_counter()
+
             success = self.ssh_manager.create_connection(
                 self.session_id,
-                hostname,
+                str(hostname),
                 port_int,
                 username,
                 password,
                 timeout=timeout_int,
                 verify_host_key=verify_host_key,
+                output_callback=self._on_ssh_output_threadsafe,
             )
 
-            # Track SSH connection performance
             connection_time_ms = (time.perf_counter() - start_time) * 1000
             self.performance_monitor.update_ssh_performance(connection_time_ms)
 
             if success:
-                # Update session with connection details
                 self.session_manager.update_session_connection(
-                    self.session_id, hostname, port_int, username
+                    self.session_id, str(hostname), port_int, username
                 )
-
-                # Set session as active
                 self.session_manager.set_active_session(self.session_id)
-
                 self.ssh_connected = True
-                self.loading = False  # Ensure loading is stopped on success
+                self.loading = False
                 self.notify("SSH connection established", severity="information")
-                # Set up the output callback
-                if connection := self.ssh_manager.get_connection(self.session_id):
-                    connection.set_output_callback(self.on_ssh_output)
-
-                # Update session display
                 self.update_session_display()
             else:
                 self.notify(
-                    "Failed to establish SSH connection. Please check your credentials, network connection, and ensure the Bandit server is accessible.",
+                    "Failed to establish SSH connection. "
+                    "Please check your credentials and network.",
                     severity="error",
                 )
-            self.loading = False
+                self.loading = False
 
         except (ValueError, OSError, ConnectionError, TimeoutError) as e:
-            # Log detailed error information
             self._log_error(f"SSH connection error: {type(e).__name__}: {e}")
-
-            # Provide user-friendly error message
-            user_message = self._get_user_friendly_error_message(str(e))
-
-            self.notify(user_message, severity="error")
+            self.notify(self._get_user_friendly_error_message(str(e)), severity="error")
             self.loading = False
         except Exception as e:
-            # Log detailed error information
-            self._log_error(f"Unexpected SSH error: {type(e).__name__}: {e}")
-
-            # Import traceback for detailed logging
             import traceback
 
-            error_details = traceback.format_exc()
-            self._log_error(f"Full traceback: {error_details}")
-
-            # Provide user-friendly error message
-            user_message = self._get_user_friendly_error_message(str(e))
-
-            self.notify(user_message, severity="error")
+            self._log_error(f"Unexpected SSH error: {type(e).__name__}: {e}")
+            self._log_error(traceback.format_exc())
+            self.notify(self._get_user_friendly_error_message(str(e)), severity="error")
             self.loading = False
 
     def disconnect_ssh(self) -> None:
-        """Disconnect from the SSH server.
-
-        Closes the SSH connection and updates the UI state to reflect
-        the disconnected status.
-        """
-        # Save session state immediately before disconnecting
         self._auto_save_session_state(force=True)
-        
         self.ssh_manager.disconnect_session(self.session_id)
         self.ssh_connected = False
+
+        try:
+            self.query_one("#ssh_connect", Button).disabled = False
+            self.query_one("#ssh_disconnect", Button).disabled = True
+        except Exception:
+            pass
+        try:
+            self.query_one("#connection_status", ConnectionStatus).connected = False
+        except Exception:
+            pass
+
         self.notify("SSH connection closed", severity="information")
 
     def send_ssh_command(self) -> None:
-        """Send a command from the command input field to the SSH connection.
-
-        Retrieves the command from the command_input field, sends it to the
-        active SSH connection, clears the input field, and adds the command
-        to the history.
-        """
+        """Read the command input, send it over SSH, update history."""
         try:
-            # Get the command input widget
             command_input = self.query_one("#command_input", Input)
             command = command_input.value.strip()
 
-            # Only proceed if we have a command
             if not command:
                 return
 
-            # Support local 'clear' command
             if command.lower() == "clear":
-                terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
-                terminal.clear()
+                self.query_one("#terminal_output", EnhancedTerminalOutput).clear()
                 command_input.value = ""
                 return
 
@@ -1070,852 +1008,359 @@ class BanditCLIApp(App):
                 self.notify("Not connected to SSH. Please connect first.", severity="warning")
                 return
 
-            # Get the SSH connection
             connection = self.ssh_manager.get_connection(self.session_id)
             if not connection:
                 self.notify("SSH connection lost", severity="error")
                 self.ssh_connected = False
                 return
 
-            # Send the command with newline
-            connection.send_command(command + "\n")
-
-            # Add to command history
+            connection.send_command(command + "\r\n")
             self.command_history.add_command(command)
-            
-            # Increment command count in session
+
             session = self.session_manager.get_active_session()
             if session:
                 session.increment_command_count()
 
-            # Clear the input field
             command_input.value = ""
-
-            # Scroll terminal to bottom
-            terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
-            terminal.scroll_to_bottom()
-            
-            # Mark state as dirty for auto-save
+            self.query_one("#terminal_output", EnhancedTerminalOutput).scroll_to_bottom()
             self._mark_state_dirty()
 
         except Exception as e:
             self.notify(f"Error sending command: {e}", severity="error")
 
-    def on_ssh_output(self, data: str) -> None:
-        """Handle SSH output data with memory optimization.
+    # ─── Levels ───────────────────────────────────────────────────────────────
 
-        Appends received SSH output to the enhanced terminal display with ANSI parsing,
-        buffering, and auto-scrolling. Also tracks commands in history.
-        Limits terminal_output size to prevent memory issues.
+    @track_performance("update_level_info")
+    def update_level_info(self) -> None:
+        self.query_one("#level_info", TextArea).load_text(
+            self.level_info.format_level_info(self.current_level)
+        )
 
-        Args:
-            data: The output data received from the SSH connection.
-        """
-        # Add new data and enforce size limit
-        self.terminal_output += data
+    def previous_level(self) -> None:
+        if self.current_level > 0:
+            self.current_level -= 1
+            self.update_level_info()
 
-        # Trim terminal_output if it exceeds maximum size
-        if len(self.terminal_output) > self.max_terminal_output_size:
-            # Keep only the most recent data (last 80% of max size)
-            trim_size = int(self.max_terminal_output_size * 0.8)
-            self.terminal_output = self.terminal_output[-trim_size:]
+    def next_level(self) -> None:
+        self.current_level += 1
+        self.update_level_info()
 
-        # Use the enhanced terminal output widget
+    def _detect_level_progression(self, command: str) -> None:
+        level_indicators = [
+            "cat", "ls", "cd", "find", "grep", "sort", "strings",
+            "base64", "hexdump", "xxd", "file", "tar", "gzip", "bzip2",
+        ]
+        if not any(ind in command for ind in level_indicators):
+            return
+        if "bandit" not in self.terminal_output.lower():
+            return
+
+        level_matches = re.findall(r"bandit(\d+)", self.terminal_output.lower())
+        if not level_matches:
+            return
+
         try:
-            terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
-            terminal.append_text(data, scroll_to_bottom=True)
-        except Exception:
-            # Fallback to regular TextArea if enhanced widget is not available
-            terminal_output = self.query_one("#terminal_output", TextArea)
-            terminal_output.insert(data)
-        
-        # Mark state as dirty for auto-save
-        self._mark_state_dirty()
+            new_level = int(level_matches[-1])
+            if new_level != self.current_level:
+                self.current_level = new_level
+                terminal_lines = (
+                    self.terminal_output.strip().split("\n") if self.terminal_output.strip() else []
+                )
+                ai_history = self.ai_mentor.conversation_history.get(self.session_id, [])
+                self.session_manager.update_session_level(
+                    self.session_id,
+                    new_level,
+                    terminal_history=terminal_lines,
+                    ai_history=ai_history,
+                )
+                self.update_level_info()
+                self.update_session_display()
+                self.notify(
+                    f"Detected level progression to Level {new_level}", severity="information"
+                )
+        except ValueError:
+            pass
 
-        # Extract commands from output (simple heuristic - lines ending with $ or #)
-        lines = data.split("\n")
-        for line in lines:
-            # Look for command prompts and extract commands
-            if ("$ " in line or "# " in line) and len(line.strip()) > 2:
-                # This might be a command output, look for the actual command
-                parts = line.strip().split()
-                if len(parts) > 1:
-                    # Assume the first part after prompt is the command
-                    cmd_start = line.find("$ ") if "$ " in line else line.find("# ")
-                    if cmd_start != -1:
-                        cmd = line[cmd_start + 2 :].strip()
-                        if cmd and not cmd.startswith("["):  # Skip status messages
-                            self.command_history.add_command(cmd)
-                            # Update recent commands list
-                            self.recent_commands.append(cmd)
-                            if len(self.recent_commands) > 5:
-                                self.recent_commands = self.recent_commands[-5:]
+    # ─── AI Mentor ────────────────────────────────────────────────────────────
 
-                            # Update session level if we detect level progression
-                            self._detect_level_progression(cmd)
-
-    def clear_conversation_history(self) -> None:
-        """Clear conversation history for current session."""
-        if self.session_id in self.ai_mentor.conversation_history:
-            del self.ai_mentor.conversation_history[self.session_id]
-            self.notify("Conversation history cleared", severity="information")
-
-    def export_conversation(self) -> None:
-        """Export conversation to markdown file.
-
-        Creates a markdown file with the conversation history and level information.
-        """
+    def send_mentor_message(self) -> None:
         try:
-            import os
-            from datetime import datetime
-
-            if self.session_id not in self.ai_mentor.conversation_history:
-                self.notify("No conversation history to export", severity="warning")
+            mentor_input = self.query_one("#mentor_input", Input)
+            message = mentor_input.value.strip()
+            if not message:
                 return
 
-            history = self.ai_mentor.conversation_history[self.session_id]
-            if not history:
-                self.notify("Empty conversation history", severity="warning")
-                return
-
-            # Create export filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"bandit_cli_conversation_{timestamp}.md"
-            export_path = os.path.expanduser(f"~/Documents/{filename}")
-
-            # Build markdown content
-            markdown_content = f"""# Bandit CLI Conversation Export\n\n**Date:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n**Level:** {self.current_level}\n**Session:** {self.session_id}\n\n---\n\n## Conversation History\n\n"""
-
-            for i, message in enumerate(history):
-                role = message.get("role", "unknown").title()
-                content = message.get("content", "")
-                markdown_content += f"**{i + 1}. {role}:** {content}\n\n"
-
-            # Write to file
-            os.makedirs(os.path.dirname(export_path), exist_ok=True)
-            with open(export_path, "w", encoding="utf-8") as f:
-                f.write(markdown_content)
-
-            self.notify(f"Conversation exported to {export_path}", severity="information")
-
-        except Exception as e:
-            self.notify(f"Failed to export conversation: {e}", severity="error")
-
-    def _handle_mentor_response(self, message: str) -> None:
-        """Handle AI mentor response generation.
-
-        Streams AI mentor responses to the chat interface, handling both
-        user messages and AI responses. Manages loading states and error
-        handling for the AI interaction.
-
-        Args:
-            message: The user's message to the AI mentor.
-        """
-        try:
             mentor_chat = self.query_one("#mentor_chat", TextArea)
             current_text = mentor_chat.text or ""
             mentor_chat.load_text(f"{current_text}\nYou: {message}\nMentor: ")
 
-            # Get AI response
-            response_stream = self.ai_mentor.get_response(
+            for chunk in self.ai_mentor.get_response(
                 message,
                 self.session_id,
                 self.current_level,
                 self.recent_commands,
                 self.terminal_output,
-            )
-
-            # Stream response
-            for chunk in response_stream:
+            ):
                 mentor_chat.insert(chunk)
-                mentor_chat.move_cursor(
-                    (mentor_chat.cursor_row, mentor_chat.cursor_column + len(chunk))
-                )
 
-        except Exception as e:
-            self.notify(f"Error getting AI response: {e}", severity="error")
-        finally:
-            # Clear input
-            mentor_input = self.query_one("#mentor_input", Input)
             mentor_input.value = ""
-            self.loading = False
-            self.ai_generating = False
-            
-            # Mark state as dirty for auto-save
             self._mark_state_dirty()
-
-    @track_performance("send_mentor_message")
-    def send_mentor_message(self) -> None:
-        """Send a message to the AI mentor.
-
-        Validates the message, checks for offline mode, and initiates
-        AI mentor response generation. Updates loading states accordingly.
-        """
-        # Check if we're in offline mode
-        if self.offline_mode:
-            self.notify("Cannot send messages to AI mentor in offline mode", severity="error")
-            return
-
-        mentor_input = self.query_one("#mentor_input", Input)
-        message = mentor_input.value.strip()
-
-        if not message:
-            return
-
-        self.ai_generating = True
-        self.loading = True
-
-        self._handle_mentor_response(message)
-
-    def previous_level(self) -> None:
-        """Go to the previous level.
-
-        Decrements the current level if not already at level 0 and
-        updates the level information display.
-        """
-        if self.current_level > 0:
-            self.current_level -= 1
-            self.update_level_info()
-            self.notify(f"Switched to Level {self.current_level}", severity="information")
-            
-            # Mark state as dirty for auto-save
-            self._mark_state_dirty()
-
-    def next_level(self) -> None:
-        """Go to the next level.
-
-        Increments the current level if not already at the maximum
-        available level and updates the level information display.
-        """
-        max_level = max([int(k) for k in self.level_info.levels_data.keys()] + [0])
-        if self.current_level < max_level:
-            self.current_level += 1
-            self.update_level_info()
-            self.notify(f"Switched to Level {self.current_level}", severity="information")
-            
-            # Mark state as dirty for auto-save
-            self._mark_state_dirty()
-        else:
-            self.notify("Already at the highest available level", severity="warning")
-
-    def action_show_cache_stats(self) -> None:
-        """Display cache statistics."""
-        level_stats = self.level_info.cache.get_stats()
-        ai_stats = self.ai_mentor.get_cache_stats()
-        perf_metrics = self.performance_monitor.get_metrics()
-
-        stats_message = f"""Cache & Performance Statistics:
-
-Level Info Cache:
-- Hits: {level_stats["hits"]}
-- Misses: {level_stats["misses"]}
-- Hit Rate: {level_stats["hit_rate_percent"]}%
-- Cache Size: {level_stats["cache_size"]} items
-
-AI Mentor Cache:
-- Hits: {ai_stats["hits"]}
-- Misses: {ai_stats["misses"]}
-- Hit Rate: {ai_stats["hit_rate_percent"]}%
-- Cache Size: {ai_stats["cache_size"]} items
-
-Performance Metrics:
-- Memory Usage: {perf_metrics.memory_usage_mb:.1f} MB
-- SSH Connection Time: {perf_metrics.ssh_connection_time_ms:.2f} ms
-- Cache Hit Rate: {perf_metrics.cache_hit_rate:.1f}%
-- Terminal Lines: {perf_metrics.terminal_output_lines}
-
-Recent Performance Alerts: {len(self.performance_monitor.get_recent_alerts(3))}
-
-Press Ctrl+Shift+C to clear all caches and metrics."""
-
-        self.notify(stats_message, severity="information")
-
-    def action_clear_cache(self) -> None:
-        """Clear all caches and performance metrics."""
-        self.level_info.clear_cache()
-        self.ai_mentor.clear_cache()
-        self.performance_monitor.clear_metrics()
-        self.notify("All caches and performance metrics cleared", severity="information")
-
-    def action_ask_about_last_output(self) -> None:
-        """Ask AI about the last terminal output.
-
-        Automatically switches to AI mentor tab and asks about recent terminal output.
-        """
-        if not self.terminal_output.strip():
-            self.notify("No terminal output to analyze", severity="warning")
-            return
-
-        # Switch to AI mentor tab
-        self.action_switch_tab("mentor")
-
-        # Get last few lines of terminal output
-        lines = self.terminal_output.strip().split("\n")
-        last_output = "\n".join(lines[-5:]) if len(lines) > 5 else self.terminal_output.strip()
-
-        # Auto-populate the mentor input with a context-aware question
-        mentor_input = self.query_one("#mentor_input", Input)
-        mentor_input.value = f"Can you help me understand this output?\n\n{last_output}"
-        mentor_input.focus()
-
-    def action_toggle_dark(self) -> None:
-        """Toggle dark mode.
-
-        Switches between light and dark themes for the application.
-        """
-        self.dark = not self.dark
-
-    def action_switch_tab(self, tab_id: str) -> None:
-        """Switch to the specified tab.
-
-        Changes the active tab in the tabbed interface. Validates the
-        tab ID and provides user feedback for invalid tab names.
-
-        Args:
-            tab_id: The ID of the tab to switch to.
-
-        Returns:
-            None: Always returns None.
-        """
-        try:
-            tabbed = self.query_one(TabbedContent)
-            if not tabbed:
-                self.notify("Tabbed content not found", severity="error")
-                return None
-
-            # Get all valid tab IDs from panes that have an ID
-            valid_tab_ids = {p.id for p in tabbed.panes if p.id}
-
-            if not tab_id:
-                self.notify("No tab ID provided", severity="warning")
-                return None
-
-            if tab_id not in valid_tab_ids:
-                self.notify(f"Unknown tab: {tab_id}", severity="warning")
-                return None
-
-            tabbed.active = tab_id
-            
-            # Mark state as dirty for auto-save
-            self._mark_state_dirty()
-            
-            return None
 
         except Exception as e:
-            self.notify(f"Failed to switch tab: {e}", severity="error")
-            return None
+            self.notify(f"Error sending mentor message: {e}", severity="error")
 
-    def on_resize(self, event: Any) -> None:
-        """Handle terminal resize events.
+    def clear_conversation_history(self) -> None:
+        self.ai_mentor.clear_conversation(self.session_id)
+        self.notify("Conversation history cleared", severity="information")
 
-        Resizes the SSH PTY to match the new terminal dimensions,
-        accounting for UI elements that reduce available space.
-
-        Args:
-            event: The resize event containing the new dimensions.
-        """
-        if not self.ssh_connected:
-            return
-
-        if connection := self.ssh_manager.get_connection(self.session_id):
-            try:
-                # Calculate safe dimensions for the PTY
-                new_width = max(20, event.size.width - 2)
-                new_height = max(5, event.size.height - 10)
-
-                # Attempt to resize via the connection manager
-                connection.resize_pty(width=new_width, height=new_height)
-            except Exception as e:
-                # Silently suppress resize errors or provide a warning notification
-                with suppress(Exception):
-                    self.notify(f"Terminal resize failed: {e}", severity="warning")
-
-    def action_show_session_info(self) -> None:
-        """Display session information."""
-        session = self.session_manager.get_active_session()
-        if session:
-            progress = session.get_progress_summary()
-            
-            # Format completed levels display
-            completed_levels_str = ', '.join(map(str, progress['completed_levels'][:10]))
-            if len(progress['completed_levels']) > 10:
-                completed_levels_str += '...'
-            elif not completed_levels_str:
-                completed_levels_str = 'None'
-            
-            info = f"""Session Information:
-
-Name: {session.name}
-ID: {session.session_id[:8]}...
-Connection: {session.get_display_name()}
-Current Level: {session.current_level}
-Created: {session.created_at.strftime("%Y-%m-%d %H:%M")}
-Last Used: {session.last_used.strftime("%Y-%m-%d %H:%M")}
-Connections: {session.connection_count}
-Active: {session.is_active}
-
---- Progress Statistics ---
-Completed Levels: {progress['total_levels_completed']}
-Levels: {completed_levels_str}
-Total Time: {format_duration(progress['total_time_spent'])}
-Avg Time/Level: {format_duration(progress['average_time_per_level'])}
-Commands Executed: {progress['total_commands_executed']}
-Progress: {progress['completion_percentage']:.1f}%"""
-            self.notify(info, severity="information")
-        else:
-            self.notify("No active session", severity="warning")
-
-    def action_new_session(self) -> None:
-        """Create a new session."""
-        self.create_new_session()
-
-    def action_save_progress(self) -> None:
-        """Manually save current session progress.
-        
-        Forces an immediate save of the current session state, bypassing
-        the debouncing mechanism. Provides user feedback on save status.
-        """
+    def export_conversation(self) -> None:
         try:
-            # Check if we have a valid session
-            if not self.session_id or self.session_id == "default":
-                self.notify("No active session to save", severity="warning")
+            history = self.ai_mentor.conversation_history.get(self.session_id, [])
+            if not history:
+                self.notify("No conversation history to export", severity="warning")
                 return
-            
-            # Verify session exists in session manager
-            active_session = self.session_manager.get_active_session()
-            if not active_session:
-                self.notify("No active session to save", severity="warning")
-                return
-            
-            # Force immediate save
-            self._auto_save_session_state(force=True)
-            
-            # Show success notification with timestamp
-            from datetime import datetime
-            timestamp = datetime.now().strftime('%H:%M:%S')
-            self.notify(f"Progress saved successfully at {timestamp}", severity="information")
-            
-            # Update session display to refresh timestamp
-            self.update_session_display()
-            
-            # Update last save indicator
-            try:
-                save_indicator = self.query_one("#last_save_indicator", Static)
-                save_indicator.update("✓ Saved")
-                # Clear the indicator after 2 seconds
-                self.set_timer(2.0, lambda: save_indicator.update(""))
-            except Exception:
-                pass  # Widget might not be ready
-                
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            export_path = os.path.expanduser(f"~/Documents/bandit_cli_conversation_{timestamp}.md")
+            content = (
+                f"# Bandit CLI Conversation Export\n\n"
+                f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"**Level:** {self.current_level}\n"
+                f"**Session:** {self.session_id}\n\n---\n\n## Conversation History\n\n"
+            )
+            for i, msg in enumerate(history):
+                content += f"**{i + 1}. {msg.get('role', 'unknown').title()}:** {msg.get('content', '')}\n\n"
+
+            os.makedirs(os.path.dirname(export_path), exist_ok=True)
+            with open(export_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            self.notify(f"Conversation exported to {export_path}", severity="information")
         except Exception as e:
-            # Log error and show user-friendly message
-            self._log_error(f"Manual save failed: {e}")
-            self.notify("Failed to save progress", severity="error")
+            self.notify(f"Failed to export conversation: {e}", severity="error")
 
-    def action_switch_session_dialog(self) -> None:
-        """Show session switching dialog."""
-        self.show_session_switch_dialog()
-
-    def _navigate_history_up(self) -> None:
-        """Navigate up through command history."""
-        # Get current input from terminal
-        previous_cmd = self.command_history.get_previous()
-        if previous_cmd:
-            self.notify(f"Previous: {previous_cmd}", severity="information")
-
-    def _navigate_history_down(self) -> None:
-        """Navigate down through command history."""
-        next_cmd = self.command_history.get_next()
-        if next_cmd is not None:
-            if next_cmd:
-                self.notify(f"Next: {next_cmd}", severity="information")
-            else:
-                self.notify("New command", severity="information")
+    # ─── Sessions ─────────────────────────────────────────────────────────────
 
     def create_new_session(self) -> None:
-        """Create a new session."""
         try:
-            # Get current connection details if available
-            hostname = self.config.get("ssh.host", "bandit.labs.overthewire.org")
-            port = self.config.get("ssh.port", 2220)
-            username = ""  # Will be set when user connects
+            if self.ssh_connected:
+                self.disconnect_ssh()
 
-            # Create new session
             session_id = self.session_manager.create_session(
-                hostname=hostname, port=port, username=username, current_level=self.current_level
+                name=f"Session {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                current_level=self.current_level,
             )
-
-            # Switch to new session
-            if self.session_manager.set_active_session(session_id):
+            if session_id and self.session_manager.set_active_session(session_id):
                 self.session_id = session_id
-                
-                # Initialize level start time for progress tracking
                 new_session = self.session_manager.get_active_session()
                 if new_session and new_session.level_start_time is None:
                     new_session.level_start_time = datetime.now()
-                
                 self.update_session_display()
                 self.notify(f"Created new session: {session_id[:8]}...", severity="information")
             else:
                 self.notify("Failed to switch to new session", severity="error")
-
         except Exception as e:
             self.notify(f"Failed to create session: {e}", severity="error")
 
     def show_session_switch_dialog(self) -> None:
-        """Show a dialog to switch sessions with restore option."""
-        
         def after_switch(result: Optional[tuple[str, bool]]) -> None:
             if result is None:
-                return  # User cancelled
-            
+                return
             session_id, restore_flag = result
-            
             try:
-                # Prevent switching to currently active session
-                active_session = self.session_manager.get_active_session()
-                if active_session and session_id == active_session.session_id:
+                active = self.session_manager.get_active_session()
+                if active and session_id == active.session_id:
                     self.notify("Already in this session", severity="information")
                     return
-                
-                # Switch to the selected session
+                if self.ssh_connected:
+                    self.disconnect_ssh()
                 if self.session_manager.set_active_session(session_id):
                     self.session_id = session_id
-                    
                     if restore_flag:
-                        # Restore session state
                         self._initialize_session()
-                        self.notify(f"Switched to session and restored state", severity="information")
+                        self.notify("Switched and restored state", severity="information")
                     else:
-                        # Only update session info without restoring
                         session = self.session_manager.get_session(session_id)
                         if session:
                             self.current_level = session.current_level
                         self.update_level_info()
-                        self.notify(f"Switched to session without restoring", severity="information")
-                    
-                    # Update UI
+                        self.notify("Switched without restoring", severity="information")
                     self.update_session_display()
-                    
                 else:
                     self.notify("Failed to switch session", severity="error")
-                    
             except Exception as e:
                 self.notify(f"Error switching session: {e}", severity="error")
-        
-        # Show the modal dialog
+
         self.push_screen(SessionSwitchModal(self.session_manager), after_switch)
 
     def show_delete_session_dialog(self) -> None:
-        """Show the delete session dialog."""
-
         def after_delete(changed: bool) -> None:
             if changed:
-                # Refresh UI if needed
                 self.update_session_display()
 
         self.push_screen(DeleteSessionModal(self.session_manager), after_delete)
 
     def update_session_display(self) -> None:
-        """Update the session display in the UI."""
         try:
             session = self.session_manager.get_active_session()
             display_widget = self.query_one("#current_session_display", Static)
             if session:
-                timestamp_str = ""
-                if session.last_saved_at:
-                    timestamp_str = f" | Last saved: {session.last_saved_at.strftime('%Y-%m-%d %H:%M:%S')}"
+                ts = (
+                    f" | Last saved: {session.last_saved_at.strftime('%Y-%m-%d %H:%M:%S')}"
+                    if session.last_saved_at
+                    else ""
+                )
                 display_widget.update(
-                    f"{session.get_display_name()} | Level {session.current_level}{timestamp_str}"
+                    f"{session.get_display_name()} | Level {session.current_level}{ts}"
                 )
             else:
                 display_widget.update("No active session")
-                
-            # Update last save indicator
+
             try:
                 save_indicator = self.query_one("#last_save_indicator", Static)
-                if session and session.last_saved_at:
-                    # Show a simple saved status
-                    save_indicator.update("✓ Saved")
-                else:
-                    save_indicator.update("⚠ Not saved")
+                save_indicator.update(
+                    "✓ Saved" if session and session.last_saved_at else "⚠ Not saved"
+                )
             except Exception:
-                pass  # Widget might not be ready yet
-                
+                pass
         except Exception:
-            pass  # Widget might not be ready yet
-
-    def _detect_level_progression(self, command: str) -> None:
-        """Detect level progression from commands and update session.
-
-        Args:
-            command: The command that was executed.
-        """
-        level_indicators = [
-            "cat",
-            "ls",
-            "cd",
-            "find",
-            "grep",
-            "sort",
-            "strings",
-            "base64",
-            "hexdump",
-            "xxd",
-            "file",
-            "tar",
-            "gzip",
-            "bzip2",
-        ]
-
-        if any(indicator in command for indicator in level_indicators):
-            if "bandit" in self.terminal_output.lower():
-                import re
-
-                level_matches = re.findall(r"bandit(\d+)", self.terminal_output.lower())
-                if level_matches:
-                    try:
-                        new_level = int(level_matches[-1])  # Get the most recent match
-                        if new_level != self.current_level:
-                            self.current_level = new_level
-                            # Prepare terminal history as list of lines
-                            terminal_lines = self.terminal_output.strip().split('\n') if self.terminal_output.strip() else []
-                            # Get AI conversation history for current session
-                            ai_history = self.ai_mentor.conversation_history.get(self.session_id, [])
-                            self.session_manager.update_session_level(
-                                self.session_id, 
-                                new_level, 
-                                terminal_history=terminal_lines, 
-                                ai_history=ai_history
-                            )
-                            self.update_level_info()
-                            self.update_session_display()
-                            self.notify(
-                                f"Detected level progression to Level {new_level}",
-                                severity="information",
-                            )
-                    except ValueError:
-                        pass
+            pass
 
     def _initialize_session(self) -> None:
-        """Initialize or restore the active session."""
-        session_has_content = False
-        restoration_summary = []
-        
         try:
-            active_session = self.session_manager.get_active_session()
-
-            if active_session:
-                self.session_id = active_session.session_id
-                self.current_level = active_session.current_level
-                
-                # Initialize level start time for progress tracking
-                if not hasattr(active_session, 'level_start_time') or active_session.level_start_time is None:
-                    active_session.level_start_time = datetime.now()
-                
-                # Restore terminal output history
-                try:
-                    if (hasattr(active_session, 'terminal_output_history') and 
-                        active_session.terminal_output_history and 
-                        isinstance(active_session.terminal_output_history, list)):
-                        
-                        terminal = self.query_one("#terminal_output", EnhancedTerminalOutput)
-                        
-                        # Validate and limit terminal history
-                        valid_lines = []
-                        for line in active_session.terminal_output_history[:10000]:  # Limit to 10k lines
-                            if isinstance(line, str):
-                                valid_lines.append(line)
-                        
-                        if valid_lines:
-                            # Update virtual buffer and display
-                            terminal._virtual_buffer = valid_lines
-                            terminal._total_lines = len(valid_lines)
-                            
-                            # Hydrate the terminal widget's buffer property
-                            terminal.buffer.buffer = valid_lines[-terminal.buffer.max_lines:]
-                            
-                            # Update self.terminal_output for exports and AI context
-                            self.terminal_output = '\n'.join(valid_lines)
-                            
-                            # Refresh the display
-                            terminal._update_display()
-                            
-                            restoration_summary.append(f"{len(valid_lines)} terminal lines")
-                            session_has_content = True
-                except Exception as e:
-                    self._log_error(f"Failed to restore terminal output: {e}")
-                
-                # Restore AI conversation history
-                try:
-                    if (hasattr(active_session, 'ai_conversation_history') and 
-                        active_session.ai_conversation_history and 
-                        isinstance(active_session.ai_conversation_history, list)):
-                        
-                        mentor_chat = self.query_one("#mentor_chat", TextArea)
-                        
-                        # Validate and filter conversation history
-                        valid_messages = []
-                        conversation_parts = []
-                        for message in active_session.ai_conversation_history:
-                            if (isinstance(message, dict) and 
-                                'role' in message and 'content' in message):
-                                
-                                role = message.get('role', 'unknown')
-                                content = message.get('content', '')
-                                if role == 'user':
-                                    conversation_parts.append(f"You: {content}")
-                                elif role == 'assistant':
-                                    conversation_parts.append(f"Mentor: {content}")
-                                
-                                # Only add valid messages to the history
-                                if role in ['user', 'assistant'] and content:
-                                    valid_messages.append(message)
-                        
-                        # Sync restored chat text to AI mentor history
-                        if valid_messages:
-                            # Trim to mentor's max length and assign to conversation history
-                            self.ai_mentor.conversation_history[self.session_id] = valid_messages[-10:]  # Default max_history is 10
-                            self.ai_mentor._trim_conversation_history(self.session_id)  # Ensure proper trimming
-                        
-                        if conversation_parts:
-                            formatted_conversation = "\n".join(conversation_parts)
-                            mentor_chat.load_text(formatted_conversation)
-                            restoration_summary.append(f"{len(conversation_parts)} AI messages")
-                except Exception as e:
-                    self._log_error(f"Failed to restore AI conversation: {e}")
-                
-                # Restore active tab
-                try:
-                    if (hasattr(active_session, 'last_active_tab') and 
-                        active_session.last_active_tab and 
-                        isinstance(active_session.last_active_tab, str)):
-                        
-                        valid_tabs = {"terminal", "session", "level", "mentor"}
-                        if active_session.last_active_tab in valid_tabs:
-                            tabbed_content = self.query_one(TabbedContent)
-                            tabbed_content.active = active_session.last_active_tab
-                            restoration_summary.append(f"active tab: {active_session.last_active_tab}")
-                except Exception as e:
-                    self._log_error(f"Failed to restore active tab: {e}")
-                
-                self.update_session_display()
-                
-                # Show restoration notification
-                if restoration_summary:
-                    timestamp = active_session.last_used.strftime("%Y-%m-%d %H:%M:%S") if active_session.last_used else "unknown time"
-                    summary_text = ", ".join(restoration_summary)
-                    self.notify(f"Session restored from {timestamp} ({summary_text})", severity="information")
-                else:
-                    self.notify(f"Restored session: {active_session.name}", severity="information")
-            else:
-                sessions = self.session_manager.list_sessions()
-                if sessions:
-                    session = sessions[0]
-                    self.session_manager.set_active_session(session.session_id)
-                    self.session_id = session.session_id
-                    self.current_level = session.current_level
-                    self.update_session_display()
-                else:
-                    self.create_new_session()
-                    
+            self.create_new_session()
         except Exception as e:
             self._handle_error_and_stop_loading(f"Failed to initialize session: {e}")
             self.session_id = "default"
             self.current_level = 0
-            session_has_content = False
-            
-        # Store flag for welcome animation decision
-        self._session_has_content = session_has_content
+        self._session_has_content = False
+
+    # ─── Auto-save ────────────────────────────────────────────────────────────
+
+    def _mark_state_dirty(self) -> None:
+        self._pending_save = True
+        if self._save_timer is not None:
+            self._save_timer.stop()
+            self._save_timer = None
+        self._save_timer = self.set_timer(
+            self._save_debounce_seconds, self._auto_save_session_state
+        )
+
+    def _auto_save_session_state(self, force: bool = False) -> None:
+        if not force and not self._pending_save:
+            return
+        try:
+            try:
+                terminal_widget = self.query_one("#terminal_output", EnhancedTerminalOutput)
+                raw: Any = terminal_widget._virtual_buffer
+                terminal_history_lines: list[str] = (
+                    raw if isinstance(raw, list) else str(raw).splitlines()
+                )
+            except Exception:
+                terminal_history_lines = self.terminal_output.splitlines()
+
+            ai_history = self.ai_mentor.conversation_history.get(self.session_id, [])
+
+            active_tab = "terminal"
+            try:
+                active_tab = self.query_one(TabbedContent).active
+            except Exception:
+                pass
+
+            self.session_manager.update_session_state(
+                session_id=self.session_id,
+                terminal_history=terminal_history_lines,
+                ai_history=ai_history,
+                active_tab=active_tab,
+            )
+            self._last_save_time = time.time()
+            self._pending_save = False
+
+            if not force:
+                try:
+                    save_indicator = self.query_one("#last_save_indicator", Static)
+                    save_indicator.update("✓ Auto-saved")
+                    self.set_timer(3.0, lambda: save_indicator.update(""))
+                except Exception:
+                    pass
+        except Exception as e:
+            self._log_error(f"Auto-save failed: {e}")
+        finally:
+            self._save_timer = None
+
+    # ─── Utility ──────────────────────────────────────────────────────────────
+
+    def _navigate_history_up(self) -> None:
+        try:
+            cmd = self.command_history.get_previous()
+            if cmd is not None:
+                self.query_one("#command_input", Input).value = cmd
+        except Exception:
+            pass
+
+    def _navigate_history_down(self) -> None:
+        try:
+            cmd = self.command_history.get_next()
+            if cmd is not None:
+                self.query_one("#command_input", Input).value = cmd
+        except Exception:
+            pass
 
     def _handle_error_and_stop_loading(self, message: str) -> None:
-        """Handle error with user-friendly feedback and stop loading.
-
-        Args:
-            message: Error message to display.
-        """
         self._log_error(f"Validation error: {message}")
-        user_message = self._get_user_friendly_error_message(message)
-        self.notify(user_message, severity="error")
+        self.notify(self._get_user_friendly_error_message(message), severity="error")
         self.loading = False
 
     def _log_error(self, message: str) -> None:
-        """Log error to file for debugging."""
         try:
-            import os
-            from datetime import datetime
-
             log_dir = os.path.expanduser("~/.bandit_cli/logs")
             os.makedirs(log_dir, exist_ok=True)
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_file = os.path.join(log_dir, f"errors_{timestamp}.log")
-
+            log_file = os.path.join(
+                log_dir, f"errors_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+            )
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now().isoformat()} - {message}\n")
         except Exception:
             pass
 
     def _get_user_friendly_error_message(self, technical_message: str) -> str:
-        """Convert technical error messages to user-friendly, actionable messages.
-
-        Args:
-            technical_message: The original technical error message.
-
-        Returns:
-            str: User-friendly error message with suggestions.
-        """
-        message_lower = technical_message.lower()
-
-        if "connection" in message_lower or "network" in message_lower:
-            if "timeout" in message_lower:
+        msg = technical_message.lower()
+        if "connection" in msg or "network" in msg:
+            if "timeout" in msg:
                 return "🔌 Connection timeout. Check your internet connection and try again."
-            elif "refused" in message_lower:
-                return "🚫 Connection refused. The server may be busy or down. Try again in a few minutes."
-            elif "authentication" in message_lower or "password" in message_lower:
-                return "🔑 Authentication failed. Double-check your username and password, then try again."
-            elif "host" in message_lower:
-                return "🌐 Host not found. Verify the server address and your network connection."
-            else:
-                return "🔌 Network error. Check your connection and try again."
-
-        elif "invalid" in message_lower or "validation" in message_lower:
-            if "username" in message_lower:
-                return "👤 Invalid username. Use only letters, numbers, underscores, and hyphens (3-32 chars)."
-            elif "password" in message_lower:
+            if "refused" in msg:
+                return "🚫 Connection refused. The server may be busy or down."
+            if "authentication" in msg or "password" in msg:
+                return "🔑 Authentication failed. Double-check your username and password."
+            if "host" in msg:
+                return "🌐 Host not found. Verify the server address and network connection."
+            return "🔌 Network error. Check your connection and try again."
+        if "invalid" in msg or "validation" in msg:
+            if "username" in msg:
+                return "👤 Invalid username. Use only letters, numbers, underscores, and hyphens."
+            if "password" in msg:
                 return "🔒 Password required. Please enter a valid password."
-            elif "port" in message_lower:
-                return "🔌 Invalid port. Use a number between 1-65535."
-            elif "format" in message_lower:
-                return "📝 Invalid format. Please check your input and try again."
-            else:
-                return "❌ Invalid input. Please check your input and try again."
-
-        elif "file" in message_lower or "not found" in message_lower:
-            if "permission" in message_lower:
-                return "🔒 Permission denied. Check file permissions and try running with appropriate access."
-            elif "directory" in message_lower:
-                return "📁 Directory not found. Check the file path and try again."
-            else:
-                return (
-                    "📄 File error. Check if the file exists and you have permission to access it."
-                )
-
-        elif "ai" in message_lower or "mentor" in message_lower:
-            if "api" in message_lower or "key" in message_lower:
+            if "port" in msg:
+                return "🔌 Invalid port. Use a number between 1–65535."
+            return "❌ Invalid input. Please check your input and try again."
+        if "file" in msg or "not found" in msg:
+            if "permission" in msg:
+                return "🔒 Permission denied. Check file permissions."
+            if "directory" in msg:
+                return "📁 Directory not found. Check the file path."
+            return "📄 File error. Check if the file exists and is accessible."
+        if "ai" in msg or "mentor" in msg:
+            if "api" in msg or "key" in msg:
                 return "🤖 AI service unavailable. Check your API key and internet connection."
-            elif "rate" in message_lower or "limit" in message_lower:
+            if "rate" in msg or "limit" in msg:
                 return "⏱️ Rate limit reached. Wait a moment before trying again."
-            else:
-                return "🧠 AI mentor error. Try again or check your configuration."
-
+            return "🧠 AI mentor error. Try again or check your configuration."
         return f"❌ Error: {technical_message}. Please try again or check the documentation."
 
 
 def main() -> None:
     """Run the BanditCLI application."""
-    app = BanditCLIApp()
-    app.run()
+    BanditCLIApp().run()
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from src.ai_mentor import BanditAIMentor
 # Add the src directory to the path so we can import the modules
 # sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+
 class TestBanditAIMentor:
     """Test cases for the BanditAIMentor class."""
 
@@ -23,10 +24,11 @@ class TestBanditAIMentor:
         self.cache_patcher = patch("src.ai_mentor.Cache")
         self.MockCache = self.cache_patcher.start()
         from src.cache import Cache as RealCache
+
         # Ensure instances created use the temp dir, overriding any cache_dir passed
         self.MockCache.side_effect = lambda *args, **kwargs: RealCache(
             cache_dir=os.path.join(self.temp_dir, "cache"),
-            **{k: v for k, v in kwargs.items() if k != "cache_dir"}
+            **{k: v for k, v in kwargs.items() if k != "cache_dir"},
         )
 
         # Create test data
