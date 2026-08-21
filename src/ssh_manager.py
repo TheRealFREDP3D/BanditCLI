@@ -100,6 +100,31 @@ class SSHConnection:
         self.verify_host_key = verify_host_key
         self._lock = threading.Lock()
 
+    def _configure_host_key_policy(self) -> None:
+        """Load trusted host keys and configure the selected trust policy."""
+        if self.client is None:
+            raise RuntimeError("SSH client has not been created")
+
+        if self.verify_host_key:
+            self.client.load_system_host_keys()
+            known_hosts = os.path.expanduser("~/.ssh/known_hosts")
+            if os.path.exists(known_hosts):
+                self.client.load_host_keys(known_hosts)
+            else:
+                self.notify(
+                    f"No known-hosts file found at {known_hosts}; "
+                    "unknown SSH host keys will be rejected.",
+                    "warning",
+                )
+            self.client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        else:
+            self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self.notify(
+                f"WARNING: SSH host-key verification is disabled for "
+                f"{self.hostname}:{self.port}",
+                "warning",
+            )
+
     def connect(self) -> bool:
         """Establish SSH connection with interactive shell.
 
@@ -111,18 +136,7 @@ class SSHConnection:
         """
         try:
             self.client = paramiko.SSHClient()
-            self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-            if self.verify_host_key:
-                try:
-                    self.client.load_system_host_keys()
-                    self.client.load_host_keys(os.path.expanduser("~/.ssh/known_hosts"))
-                except OSError as e:
-                    self.notify(
-                        f"Warning: Could not load known hosts file: {e}. "
-                        "New hosts will be added automatically.",
-                        "warning",
-                    )
+            self._configure_host_key_policy()
 
             max_retries = 3
             retry_delay = 2
