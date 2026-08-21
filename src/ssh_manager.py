@@ -106,14 +106,21 @@ class SSHConnection:
             raise RuntimeError("SSH client has not been created")
 
         if self.verify_host_key:
-            self.client.load_system_host_keys()
             known_hosts = os.path.expanduser("~/.ssh/known_hosts")
-            if os.path.exists(known_hosts):
-                self.client.load_host_keys(known_hosts)
-            else:
+            try:
+                self.client.load_system_host_keys()
+                if os.path.exists(known_hosts):
+                    self.client.load_host_keys(known_hosts)
+                else:
+                    self.notify(
+                        f"No known-hosts file found at {known_hosts}; "
+                        "unknown SSH host keys will be rejected.",
+                        "warning",
+                    )
+            except OSError as error:
                 self.notify(
-                    f"No known-hosts file found at {known_hosts}; "
-                    "unknown SSH host keys will be rejected.",
+                    f"Warning: Could not load known hosts: {error}. "
+                    "Unknown SSH host keys will still be rejected.",
                     "warning",
                 )
             self.client.set_missing_host_key_policy(paramiko.RejectPolicy())
