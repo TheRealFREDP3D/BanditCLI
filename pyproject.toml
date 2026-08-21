@@ -50,6 +50,13 @@ dev = [
 [project.scripts]
 bandit-cli = "src.main:main"
 
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = ["src"]
+
+[tool.setuptools.package-data]
+src = ["*.json", "*.tcss"]
+
 [tool.mypy]
 python_version = "3.9"
 warn_return_any = true
